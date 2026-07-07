@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-07
+
 ### Added
 - Cross-harness skill support: the single `ornith-loop` `SKILL.md` now runs under both
   Claude Code and opencode (the executing agent is the reviewer, using its own model), and a
@@ -32,5 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`orn` CLI, `ornith-loop` skill, experiment journal).
 - Project documentation: `README.md`, `CHANGELOG.md`, `CLAUDE.md`.
 
-[Unreleased]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/giuseppeoncia/ornith-loop/releases/tag/v0.1.0
