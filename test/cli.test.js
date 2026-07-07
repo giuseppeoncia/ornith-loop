@@ -41,6 +41,20 @@ test("orn run: nonzero exit when pi crashes", async () => {
   }
 });
 
+test("orn run: a slash-bearing --label does not crash; a record is still written", async () => {
+  const runs = await mkdtemp(join(tmpdir(), "orn-cli-"));
+  try {
+    const { stdout } = await pexec(process.execPath, [orn, "run", "hi", "--label", "a/b", "--runs-dir", runs], {
+      env: { ...process.env, ORN_PI_BIN: fakePi, FAKE_PI_MODE: "success" },
+    });
+    assert.match(stdout, /exit: completed/);
+    const files = await readdir(runs);
+    assert.ok(files.some((f) => f.endsWith(".json")), "a record json was written despite the slash label");
+  } finally {
+    await rm(runs, { recursive: true, force: true });
+  }
+});
+
 test("orn --help exits 0 with usage", async () => {
   const { stdout } = await pexec(process.execPath, [orn, "--help"]);
   assert.match(stdout, /orn run/);

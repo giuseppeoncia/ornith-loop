@@ -29,7 +29,8 @@ if (options.promptFile) {
 }
 
 const timestamp = new Date().toISOString();
-const runId = `${timestamp.replace(/[:.]/g, "-")}_${options.label}`;
+const safeLabel = options.label.replace(/[^A-Za-z0-9._-]/g, "-");
+const runId = `${timestamp.replace(/[:.]/g, "-")}_${safeLabel}`;
 
 const before = options.workdir ? snapshot(options.workdir) : null;
 
@@ -46,7 +47,7 @@ if (options.workdir && before) {
 }
 
 const flags = detectFlags({ summary, workdirChange });
-const record = buildRecord({ options, invocation, summary, flags, workdirChange, runId, timestamp });
+const record = buildRecord({ options, invocation, summary, flags, workdirChange, runId, timestamp, runsDir: options.runsDir });
 const { recordPath } = writeRecord(record, invocation.stdout, { runsDir: options.runsDir });
 
 process.stdout.write(formatSummary(record) + `\nrecord: ${recordPath}\n`);

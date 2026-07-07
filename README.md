@@ -5,8 +5,8 @@ A repeatable, observable harness for experimenting with **self-scaffolding local
 [pi](https://www.npmjs.com/package/@just-every/pi) minimalist agent harness — with
 Claude as the external reviewer.
 
-> **Status: `orn` CLI implemented and tested.** The design is in
-> [`docs/DESIGN.md`](docs/DESIGN.md); the `ornith-loop` skill is still to come.
+> **Status: the `orn` CLI and the `ornith-loop` skill are implemented; see below.**
+> The design is in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Why pi + ornith
 
@@ -102,7 +102,6 @@ README.md        this file
 CHANGELOG.md     Keep a Changelog format
 CLAUDE.md        guidance for Claude Code working in this repo
 bin/, src/       the `orn` CLI
+skill/           the `ornith-loop` Claude Code skill (see Skill section above)
 journal/         experiment journal (per-run entries; see journal/README.md)
 ```
-
-(the `ornith-loop` skill lands during a later phase.)

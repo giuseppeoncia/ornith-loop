@@ -68,5 +68,9 @@ These are empirical, model-specific lessons — treat as grounding for any futur
 
 ## Commands
 
-_Pending implementation._ Once `orn` exists this section will document
-`orn run …`, tests, and lint.
+- `orn run "<goal + grounding>" [--workdir <repo>] [--label <name>] [--model <id>]
+  [--thinking off] [--timeout <sec>] [--prompt-file <path>] [--runs-dir <path>]` —
+  invoke pi against Ollama and capture a run record under `runs/`.
+- `npm test` — run the test suite (`node --test`, zero deps).
+
+No linter configured yet.

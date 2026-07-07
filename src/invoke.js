@@ -21,6 +21,8 @@ export function invokePi(opts) {
 
     let stdout = "";
     let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     child.stdout.on("data", (d) => (stdout += d));
     child.stderr.on("data", (d) => (stderr += d));
 

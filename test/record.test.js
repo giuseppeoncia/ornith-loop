@@ -17,7 +17,7 @@ test("deriveExitReason maps invocation state", () => {
 });
 
 test("buildRecord composes a schemaVersion-1 record", () => {
-  const r = buildRecord({ options: opts, invocation, summary, flags, workdirChange: null, runId: "RID", timestamp: "2026-07-07T16:50:00.000Z" });
+  const r = buildRecord({ options: opts, invocation, summary, flags, workdirChange: null, runId: "RID", timestamp: "2026-07-07T16:50:00.000Z", runsDir: "runs" });
   assert.equal(r.schemaVersion, 1);
   assert.equal(r.runId, "RID");
   assert.equal(r.exit.reason, "completed");
@@ -25,6 +25,9 @@ test("buildRecord composes a schemaVersion-1 record", () => {
   assert.equal(r.toolCallCount, 1);
   assert.equal(r.logPath, "runs/RID.jsonl");
   assert.equal(r.flags.claimedDone, true);
+
+  const r2 = buildRecord({ options: opts, invocation, summary, flags, workdirChange: null, runId: "RID", timestamp: "2026-07-07T16:50:00.000Z", runsDir: "/custom/out" });
+  assert.equal(r2.logPath, "/custom/out/RID.jsonl");
 });
 
 test("writeRecord writes record json and raw log", async () => {
@@ -35,6 +38,7 @@ test("writeRecord writes record json and raw log", async () => {
     const written = JSON.parse(await readFile(recordPath, "utf8"));
     assert.equal(written.runId, "RID");
     assert.match(await readFile(logPath, "utf8"), /agent_end/);
+    assert.equal(logPath, r.logPath);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

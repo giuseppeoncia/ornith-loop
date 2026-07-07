@@ -7,7 +7,7 @@ export function deriveExitReason({ timedOut, exitCode }) {
   return "completed";
 }
 
-export function buildRecord({ options, invocation, summary, flags, workdirChange, runId, timestamp }) {
+export function buildRecord({ options, invocation, summary, flags, workdirChange, runId, timestamp, runsDir }) {
   return {
     schemaVersion: 1,
     runId,
@@ -38,7 +38,7 @@ export function buildRecord({ options, invocation, summary, flags, workdirChange
     flags,
     workdirChange,
     malformedLines: summary.malformedLines ?? 0,
-    logPath: `runs/${runId}.jsonl`,
+    logPath: join(runsDir, `${runId}.jsonl`),
   };
 }
 

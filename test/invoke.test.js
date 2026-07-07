@@ -25,3 +25,9 @@ test("invokePi surfaces a nonzero exit without throwing", async () => {
   assert.equal(r.exitCode, 2);
   assert.match(r.stderr, /boom/);
 });
+
+test("invokePi preserves multi-byte UTF-8 output intact", async () => {
+  const r = await invokePi({ ...base, env: { FAKE_PI_MODE: "utf8" } });
+  assert.equal(r.exitCode, 0);
+  assert.match(r.stdout, /ornith → café ✅ 日本語 🐦/);
+});
