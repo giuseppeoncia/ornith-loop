@@ -2,7 +2,7 @@
 
 A repeatable, observable harness for experimenting with **self-scaffolding local models**
 (starting with [Ornith](https://huggingface.co/KikoCis) 1.0) under the
-[pi](https://www.npmjs.com/package/@just-every/pi) minimalist agent harness — with
+[pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) minimalist agent harness — with
 Claude as the external reviewer.
 
 > **Status: the `orn` CLI and the `ornith-loop` skill are implemented; see below.**
@@ -88,7 +88,7 @@ production automation; a local reviewer model; auto-escalation or a scaffold "di
 
 ## Requirements
 
-- [pi](https://www.npmjs.com/package/@just-every/pi) on `PATH`
+- [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) on `PATH`
 - [Ollama](https://ollama.com) running locally with a self-scaffolding model pulled
   (default `ornith-1.0-9b-64k`), registered as the `ollama` provider in
   `~/.pi/agent/models.json`
