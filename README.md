@@ -41,7 +41,7 @@ Three components (see the design for detail):
 1. **`orn`** — a thin Node CLI that invokes pi with the right defaults (`--thinking off`,
    print mode, timeout, env passthrough) and parses pi's json event stream into an
    observability summary (ornith's self-built tool sequence + failure-mode flags).
-2. **`ornith-loop`** — a Claude Code skill encoding the method: gather grounding → author a
+2. **`ornith-loop`** — a cross-harness skill (Claude Code + opencode) encoding the method: gather grounding → author a
    minimal-scaffold prompt → run via `orn` → verify externally → bounded corrective loop →
    journal.
 3. **Experiment journal** — accumulated, comparable observations across runs and models.
@@ -106,6 +106,6 @@ README.md        this file
 CHANGELOG.md     Keep a Changelog format
 CLAUDE.md        guidance for Claude Code working in this repo
 bin/, src/       the `orn` CLI
-skill/           the `ornith-loop` Claude Code skill (see Skill section above)
+skill/           the `ornith-loop` cross-harness skill (see Skill section above)
 journal/         experiment journal (per-run entries; see journal/README.md)
 ```

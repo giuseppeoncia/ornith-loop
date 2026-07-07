@@ -33,7 +33,7 @@ grounding on corrective rounds, never scaffold.
   --thinking off --mode json --name <label>`, enforces a timeout, passes env through, and
   parses pi's json event stream into an observability summary. Does NOT author prompts,
   choose grounding, or judge correctness.
-- **`ornith-loop`** — Claude Code skill encoding the method: grounding → minimal-scaffold
+- **`ornith-loop`** — cross-harness skill (Claude Code + opencode) encoding the method: grounding → minimal-scaffold
   prompt → `orn` → external verification → bounded corrective loop (default 3) → journal.
 - **`journal/`** — accumulated run observations (the learning deliverable).
 
