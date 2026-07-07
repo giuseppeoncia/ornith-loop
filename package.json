@@ -1,0 +1,12 @@
+{
+  "name": "ornith-loop",
+  "version": "0.1.0",
+  "description": "Observable pi-invocation harness for self-scaffolding local models (ornith), with Claude as external reviewer.",
+  "type": "module",
+  "bin": { "orn": "bin/orn.js" },
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
