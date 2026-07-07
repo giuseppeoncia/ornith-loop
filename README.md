@@ -67,6 +67,17 @@ count, and failure-mode flags. Run `orn --help` for all options.
 
 **Tests:** `npm test` (uses `node --test`; zero dependencies).
 
+### Skill
+
+Install the `ornith-loop` Claude Code skill (usable from any project):
+
+```bash
+scripts/install-skill.sh   # symlinks skill/ornith-loop -> ~/.claude/skills/ornith-loop
+```
+
+It encodes the method: grounding recon → minimal-scaffold prompt → `orn` run → external
+verification → bounded corrective loop (default 3) → journal.
+
 ## Goal & non-goals
 
 **Goal:** learn which grounding lets a self-scaffolding local model succeed, repeatably and
