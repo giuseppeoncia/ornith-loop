@@ -122,9 +122,9 @@ Claude (skill) --grounding+goal prompt--> orn --> pi -p (--mode json) --> ornith
   self-scaffolding succeed" becomes an answerable, evidence-backed question.
 - `orn` is usable standalone (invocation + summary) without the skill.
 
-## Open items (for the plan, not blockers)
+## Open items — Resolved (see plan)
 
-- Journal layout: per-run files vs single append log.
-- Run-record schema (fields in the JSON under `runs/`).
-- Whether `orn` also snapshots `git status`/diff of a target workdir to power the
-  "claimed done but nothing changed" heuristic.
+The implementation plan resolved the three items above: per-run self-contained journal
+files under `journal/` (see `journal/README.md`); a run record with `schemaVersion: 1`
+under `runs/`; and an optional `--workdir` git snapshot (before/after) powering the
+"claimed done but nothing changed" heuristic.

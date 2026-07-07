@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"22222222-2222-2222-2222-222222222222","timestamp":"2026-07-07T16:55:00.000Z","cwd":"/tmp/target"}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_end","message":{"role":"assistant","stopReason":"stop","content":[{"type":"thinking","thinking":"Let me call the tool.\n<tool_call>{\"name\":\"write\",\"arguments\":{\"path\":\"x\"}}</tool_call>"},{"type":"text","text":"Now I'll create the file."}]}}
+{"type":"agent_end","messages":[{"role":"assistant","stopReason":"stop","content":[{"type":"thinking","thinking":"Let me call the tool.\n<tool_call>{\"name\":\"write\",\"arguments\":{\"path\":\"x\"}}</tool_call>"},{"type":"text","text":"Now I'll create the file."}]}]}

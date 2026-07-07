@@ -5,8 +5,8 @@ A repeatable, observable harness for experimenting with **self-scaffolding local
 [pi](https://www.npmjs.com/package/@just-every/pi) minimalist agent harness — with
 Claude as the external reviewer.
 
-> **Status: design phase.** The design is in [`docs/DESIGN.md`](docs/DESIGN.md). No code
-> yet — the CLI and skill are specified but not implemented.
+> **Status: the `orn` CLI and the `ornith-loop` skill are implemented; see below.**
+> The design is in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Why pi + ornith
 
@@ -46,6 +46,38 @@ Three components (see the design for detail):
    journal.
 3. **Experiment journal** — accumulated, comparable observations across runs and models.
 
+## Usage
+
+```bash
+# one shot: give ornith a goal + grounding, capture the run
+orn run "Create scripts/hello.sh that prints hi; make it executable" \
+  --workdir /path/to/target-repo --label hello-script
+
+# from a prompt file, comparing a larger tools-capable model
+orn run --prompt-file prompt.md --model qwen3.6-35b-a3b-64k --label compare-qwen
+```
+
+`orn run` invokes pi (`--thinking off --mode json` against the local Ollama provider),
+enforces a timeout, writes a run record + raw event log under `runs/` (gitignored), and
+prints an observability summary: exit reason, ornith's self-built tool sequence, thinking
+count, and failure-mode flags. Run `orn --help` for all options.
+
+**Requirements at runtime:** `pi` on `PATH`, Ollama running with the model pulled, and the
+`ollama` provider registered in `~/.pi/agent/models.json`.
+
+**Tests:** `npm test` (uses `node --test`; zero dependencies).
+
+### Skill
+
+Install the `ornith-loop` Claude Code skill (usable from any project):
+
+```bash
+scripts/install-skill.sh   # symlinks skill/ornith-loop -> ~/.claude/skills/ornith-loop
+```
+
+It encodes the method: grounding recon → minimal-scaffold prompt → `orn` run → external
+verification → bounded corrective loop (default 3) → journal.
+
 ## Goal & non-goals
 
 **Goal:** learn which grounding lets a self-scaffolding local model succeed, repeatably and
@@ -54,11 +86,12 @@ with evidence.
 **Non-goals:** token/cost savings (Claude-as-reviewer does not save them, by design);
 production automation; a local reviewer model; auto-escalation or a scaffold "dial".
 
-## Requirements (intended)
+## Requirements
 
 - [pi](https://www.npmjs.com/package/@just-every/pi) on `PATH`
 - [Ollama](https://ollama.com) running locally with a self-scaffolding model pulled
-  (default `ornith-1.0-9b-64k`)
+  (default `ornith-1.0-9b-64k`), registered as the `ollama` provider in
+  `~/.pi/agent/models.json`
 - Node (v24+)
 
 ## Repo layout
@@ -68,6 +101,7 @@ docs/DESIGN.md   design & rationale (source of truth)
 README.md        this file
 CHANGELOG.md     Keep a Changelog format
 CLAUDE.md        guidance for Claude Code working in this repo
+bin/, src/       the `orn` CLI
+skill/           the `ornith-loop` Claude Code skill (see Skill section above)
+journal/         experiment journal (per-run entries; see journal/README.md)
 ```
-
-(`orn` CLI, the `ornith-loop` skill, and `journal/` land during implementation.)
