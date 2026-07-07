@@ -79,9 +79,12 @@ orn run "<inline prompt>"
 Explicitly out of scope for the CLI: it does not author prompts, does not decide grounding,
 does not verify correctness. Those are the skill's / Claude's job.
 
-### 2. `ornith-loop` — Claude Code skill
+### 2. `ornith-loop` — cross-harness skill
 
-Encodes the method (minimal-scaffold). Steps Claude follows:
+A single `SKILL.md` that runs under any coding agent (Claude Code and opencode), installed
+via `orn install-skill`. Whichever agent executes it **is** the external reviewer, using its
+own model — Claude Code by default, opencode supported. Encodes the method (minimal-scaffold).
+Steps the host agent follows:
 1. **Grounding**: recon the target repo — real paths, versions, routes, selectors,
    conventions the model cannot know.
 2. **Author a minimal-scaffold prompt**: goal + grounding, *not* step-by-step micro-tasks.
