@@ -127,7 +127,11 @@ git checkout develop
 Notes:
 - Do **not** create the tag before the PR merges — its target SHA only exists after
   GitHub produces the merge commit.
-- `release.yml` requires the repo secret `NPM_TOKEN` (an npm automation token). The
-  GitHub Release uses the built-in `GITHUB_TOKEN`.
+- `release.yml` publishes to npm via **OIDC trusted publishing** — no token: the job has
+  `id-token: write` and npmjs.com has a trusted publisher configured for this repo +
+  `release.yml` (provenance is automatic). The GitHub Release uses the built-in
+  `GITHUB_TOKEN`. One-time bootstrap caveat: the *first* version of a new package can't be
+  OIDC-published (npm requires the package to already exist), so it is published manually
+  once; every release after that goes through OIDC.
 - Reverts go via a follow-up PR (`git revert` on `develop` → PR → merge); `main` history
   is protected, never rewrite it.
