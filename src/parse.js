@@ -35,7 +35,6 @@ function finalAssistantMessages(events) {
 }
 
 export function summarizeEvents(events) {
-  // Tool sequence from actually-executed calls.
   const errorById = new Map();
   for (const e of events) {
     if (e.type === "tool_execution_end") errorById.set(e.toolCallId, Boolean(e.isError));
@@ -51,23 +50,21 @@ export function summarizeEvents(events) {
   const messages = finalAssistantMessages(events);
   const thinkingTexts = [];
   const assistantTexts = [];
-  let lastTextBlocks = [];
-  let stopReason = null;
-  let errorMessage = null;
   for (const m of messages) {
-    const blocks = assistantContent(m);
-    const textBlocks = [];
-    for (const b of blocks) {
+    for (const b of assistantContent(m)) {
       if (b.type === "thinking" && typeof b.thinking === "string") thinkingTexts.push(b.thinking);
-      if (b.type === "text" && typeof b.text === "string") {
-        assistantTexts.push(b.text);
-        textBlocks.push(b.text);
-      }
+      if (b.type === "text" && typeof b.text === "string") assistantTexts.push(b.text);
     }
-    if (textBlocks.length) lastTextBlocks = textBlocks;
-    if (typeof m.stopReason === "string") stopReason = m.stopReason;
-    if (typeof m.errorMessage === "string") errorMessage = m.errorMessage;
   }
+
+  // finalText / stopReason / errorMessage reflect the LAST assistant message specifically,
+  // even if empty — an empty final text is itself signal (ornith stalled before its last step).
+  const last = messages.length ? messages[messages.length - 1] : null;
+  const lastTextBlocks = last
+    ? assistantContent(last).filter((b) => b.type === "text" && typeof b.text === "string").map((b) => b.text)
+    : [];
+  const stopReason = last && typeof last.stopReason === "string" ? last.stopReason : null;
+  const errorMessage = last && typeof last.errorMessage === "string" ? last.errorMessage : null;
 
   return {
     toolSequence,

@@ -29,3 +29,29 @@ test("summarizeEvents extracts tool sequence, thinking, final text, stopReason",
   assert.equal(s.stopReason, "stop");
   assert.equal(s.errorMessage, null);
 });
+
+test("summarizeEvents takes finalText/stopReason from the LAST assistant message, not a stale earlier one", () => {
+  const events = [{
+    type: "agent_end",
+    messages: [
+      { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "intermediate answer" }] },
+      { role: "assistant", stopReason: "toolUse", content: [{ type: "toolCall", id: "c1", name: "write", arguments: {} }] },
+    ],
+  }];
+  const s = summarizeEvents(events);
+  assert.equal(s.finalText, "", "last assistant message has no text -> empty, not the stale earlier text");
+  assert.equal(s.stopReason, "toolUse");
+});
+
+test("summarizeEvents flags a failed tool (isError true) and an unfinished tool (isError null)", () => {
+  const events = [
+    { type: "tool_execution_start", toolCallId: "a", toolName: "bash", args: { cmd: "x" } },
+    { type: "tool_execution_end", toolCallId: "a", toolName: "bash", result: "err", isError: true },
+    { type: "tool_execution_start", toolCallId: "b", toolName: "write", args: { path: "y" } },
+    { type: "agent_end", messages: [{ role: "assistant", stopReason: "aborted", content: [] }] },
+  ];
+  const s = summarizeEvents(events);
+  assert.deepEqual(s.toolSequence.map((t) => [t.name, t.isError]), [["bash", true], ["write", null]]);
+  assert.equal(s.stopReason, "aborted");
+  assert.equal(s.finalText, "");
+});
