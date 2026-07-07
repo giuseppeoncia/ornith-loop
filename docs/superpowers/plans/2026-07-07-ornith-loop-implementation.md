@@ -8,6 +8,8 @@
 
 **Tech Stack:** Node v24 (ESM, `node:test` + `node:assert/strict`, `node:child_process`, `node:fs`), no runtime or dev dependencies. `pi` (`@earendil-works/pi-coding-agent` v0.80.3) invoked as a subprocess against a local Ollama provider.
 
+**Spec:** [`../specs/2026-07-07-ornith-loop-implementation.md`](../specs/2026-07-07-ornith-loop-implementation.md) (scope + acceptance criteria; defers to `docs/DESIGN.md` for full design).
+
 ## Context
 
 Why this exists (from `docs/DESIGN.md`, the source of truth): Ornith is RL-trained to build its own scaffold (plan, tool-call sequence, error recovery); `pi` is the minimalist harness that leaves room for exactly that. The tool must **not steal ornith's nest** — it supplies *grounding* (facts the model can't derive) and *verification/observability*, never *reasoning scaffold*. `orn` mechanizes the hand-discovered pi best-practices and turns pi's raw event stream into a run summary; the skill encodes the method; the journal accumulates comparable observations across runs/models — the primary "learning" deliverable.
