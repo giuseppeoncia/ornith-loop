@@ -1,0 +1,10 @@
+{"type":"session","version":3,"id":"11111111-1111-1111-1111-111111111111","timestamp":"2026-07-07T16:50:00.000Z","cwd":"/tmp/target"}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"tool_execution_start","toolCallId":"c1","toolName":"read","args":{"path":"package.json"}}
+{"type":"tool_execution_end","toolCallId":"c1","toolName":"read","result":"{...}","isError":false}
+{"type":"tool_execution_start","toolCallId":"c2","toolName":"write","args":{"path":"hello.txt","content":"hi"}}
+{"type":"tool_execution_end","toolCallId":"c2","toolName":"write","result":"ok","isError":false}
+{"type":"message_end","message":{"role":"assistant","stopReason":"stop","content":[{"type":"thinking","thinking":"I will create the file."},{"type":"text","text":"Done. I created hello.txt."}]}}
+{"type":"turn_end","message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"Done. I created hello.txt."}]},"toolResults":[]}
+{"type":"agent_end","messages":[{"role":"assistant","stopReason":"stop","content":[{"type":"thinking","thinking":"I will create the file."},{"type":"text","text":"Done. I created hello.txt."}]}]}
