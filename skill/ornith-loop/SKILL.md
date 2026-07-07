@@ -1,6 +1,7 @@
 ---
 name: ornith-loop
 description: Use when driving a self-scaffolding local model (ornith 1.0 first) under the pi harness via the `orn` CLI — gather grounding, author a MINIMAL-scaffold prompt, run, verify externally, loop with more grounding (not scaffold), and journal. Use for "run this task on ornith", "have the local model do X", or comparing local models under pi.
+license: MIT
 ---
 
 # ornith-loop
@@ -8,6 +9,10 @@ description: Use when driving a self-scaffolding local model (ornith 1.0 first) 
 Drive a self-scaffolding local model with the `orn` CLI. **The one rule: do not steal
 ornith's nest.** Supply *grounding* (facts it can't derive) and *verification*; never
 supply *reasoning scaffold* (plans, step-by-step micro-tasks, tool sequences).
+
+Host-agnostic: run this from any coding agent (Claude Code, opencode, …). Whichever agent
+executes these steps **is** the external reviewer — it does the verification with its own
+model. `orn` and `pi` behave identically on every host.
 
 ## Distinguish three kinds of help
 - **Reasoning scaffold** (plan, sequence, recovery) → ornith's job. NEVER provide it.
