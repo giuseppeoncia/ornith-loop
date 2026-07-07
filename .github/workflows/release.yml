@@ -5,7 +5,8 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: write   # create the GitHub Release
+  id-token: write   # OIDC token for npm trusted publishing
 
 jobs:
   release:
@@ -15,7 +16,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
+
+      # Trusted publishing (OIDC) requires npm >= 11.5.1.
+      - run: npm install -g npm@latest
 
       - run: npm ci
       - run: npm test
@@ -41,10 +44,10 @@ jobs:
           ' CHANGELOG.md > RELEASE_NOTES.md
           echo "----- release notes -----"; cat RELEASE_NOTES.md
 
+      # OIDC trusted publishing — no token; provenance is automatic.
+      # Requires a trusted publisher configured on npmjs.com for this repo + release.yml.
       - name: Publish to npm
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         env:

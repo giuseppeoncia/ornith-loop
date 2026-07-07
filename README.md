@@ -41,7 +41,7 @@ Three components (see the design for detail):
 1. **`orn`** — a thin Node CLI that invokes pi with the right defaults (`--thinking off`,
    print mode, timeout, env passthrough) and parses pi's json event stream into an
    observability summary (ornith's self-built tool sequence + failure-mode flags).
-2. **`ornith-loop`** — a Claude Code skill encoding the method: gather grounding → author a
+2. **`ornith-loop`** — a cross-harness skill (Claude Code + opencode) encoding the method: gather grounding → author a
    minimal-scaffold prompt → run via `orn` → verify externally → bounded corrective loop →
    journal.
 3. **Experiment journal** — accumulated, comparable observations across runs and models.
@@ -69,10 +69,14 @@ count, and failure-mode flags. Run `orn --help` for all options.
 
 ### Skill
 
-Install the `ornith-loop` Claude Code skill (usable from any project):
+`ornith-loop` is a single `SKILL.md` that works from **any** coding agent — Claude Code or
+[opencode](https://opencode.ai). Whichever agent runs it is the external reviewer (it does
+the verification with its own model). Install it into the harness(es) you use:
 
 ```bash
-scripts/install-skill.sh   # symlinks skill/ornith-loop -> ~/.claude/skills/ornith-loop
+orn install-skill            # auto: every detected harness
+orn install-skill --target claude     # ~/.claude/skills/ornith-loop
+orn install-skill --target opencode   # ~/.config/opencode/skills/ornith-loop
 ```
 
 It encodes the method: grounding recon → minimal-scaffold prompt → `orn` run → external
@@ -102,6 +106,6 @@ README.md        this file
 CHANGELOG.md     Keep a Changelog format
 CLAUDE.md        guidance for Claude Code working in this repo
 bin/, src/       the `orn` CLI
-skill/           the `ornith-loop` Claude Code skill (see Skill section above)
+skill/           the `ornith-loop` cross-harness skill (see Skill section above)
 journal/         experiment journal (per-run entries; see journal/README.md)
 ```

@@ -59,3 +59,17 @@ test("orn --help exits 0 with usage", async () => {
   const { stdout } = await pexec(process.execPath, [orn, "--help"]);
   assert.match(stdout, /orn run/);
 });
+
+test("orn install-skill --target claude: symlinks into CLAUDE_SKILLS_DIR", async () => {
+  const skills = await mkdtemp(join(tmpdir(), "orn-skills-"));
+  try {
+    const { stdout } = await pexec(process.execPath, [orn, "install-skill", "--target", "claude"], {
+      env: { ...process.env, CLAUDE_SKILLS_DIR: skills },
+    });
+    assert.match(stdout, /symlinked|copied/);
+    const files = await readdir(skills);
+    assert.ok(files.includes("ornith-loop"), "skill installed at target dir");
+  } finally {
+    await rm(skills, { recursive: true, force: true });
+  }
+});
