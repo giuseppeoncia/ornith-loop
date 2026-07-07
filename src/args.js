@@ -1,4 +1,5 @@
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
+const INSTALL_TARGETS = new Set(["auto", "claude", "opencode"]);
 
 function slugLabel(prompt) {
   const slug = prompt.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").split("-").slice(0, 5).join("-");
@@ -6,11 +7,15 @@ function slugLabel(prompt) {
 }
 
 export function parseArgs(argv) {
-  if (argv.includes("-h") || argv.includes("--help")) return { help: true };
-
   const command = argv[0];
-  if (command !== "run") return { error: `unknown command '${command ?? ""}': expected 'run'` };
+  if (!command || command === "-h" || command === "--help") return { help: true };
+  if (command === "run") return parseRun(argv.slice(1));
+  if (command === "install-skill") return parseInstall(argv.slice(1));
+  return { error: `unknown command '${command}': expected 'run' or 'install-skill'` };
+}
 
+function parseRun(args) {
+  if (args.includes("-h") || args.includes("--help")) return { help: true };
   const opts = {
     command: "run",
     prompt: "",
@@ -25,10 +30,9 @@ export function parseArgs(argv) {
     piBin: process.env.ORN_PI_BIN || "pi",
   };
   const positionals = [];
-
-  for (let i = 1; i < argv.length; i++) {
-    const a = argv[i];
-    const next = () => argv[++i];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    const next = () => args[++i];
     switch (a) {
       case "--prompt-file": opts.promptFile = next(); break;
       case "--model": opts.model = next(); break;
@@ -43,7 +47,6 @@ export function parseArgs(argv) {
         positionals.push(a);
     }
   }
-
   opts.prompt = positionals.join(" ");
   const hasInline = opts.prompt.length > 0;
   const hasFile = Boolean(opts.promptFile);
@@ -53,12 +56,33 @@ export function parseArgs(argv) {
     return { error: `invalid --thinking '${opts.thinking}': one of ${[...THINKING_LEVELS].join(", ")}` };
   if (!Number.isInteger(opts.timeoutSec) || opts.timeoutSec <= 0)
     return { error: `invalid --timeout: must be a positive integer number of seconds` };
-
   if (!opts.label) opts.label = hasFile ? "run" : slugLabel(opts.prompt);
   return { options: opts };
 }
 
-export const HELP = `orn run <prompt> [options]
+function parseInstall(args) {
+  const opts = { command: "install-skill", target: "auto" };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    const next = () => args[++i];
+    switch (a) {
+      case "-h": case "--help": return { help: true };
+      case "--target": opts.target = next(); break;
+      default: return { error: `unexpected argument '${a}'` };
+    }
+  }
+  if (!INSTALL_TARGETS.has(opts.target))
+    return { error: `invalid --target '${opts.target}': one of ${[...INSTALL_TARGETS].join(", ")}` };
+  return { options: opts };
+}
+
+export const HELP = `orn <command> [options]
+
+Commands:
+  run <prompt>       drive a self-scaffolding local model via pi, capturing a run record
+  install-skill      install the ornith-loop skill into your coding agent(s)
+
+orn run <prompt> [options]
   --prompt-file <path>   read the prompt from a file (instead of a positional)
   --model <id>           default: ornith-1.0-9b-64k
   --provider <name>      default: ollama
@@ -67,5 +91,10 @@ export const HELP = `orn run <prompt> [options]
   --label, -n <name>     session/run label (default: slug of prompt)
   --workdir <path>       git repo to snapshot before/after (claimed-done-no-change flag)
   --runs-dir <path>      where to write run records (default: runs)
-  -h, --help             show this help
-env: ORN_PI_BIN overrides the pi binary path (default: pi)`;
+  env: ORN_PI_BIN overrides the pi binary path (default: pi)
+
+orn install-skill [options]
+  --target <where>       auto|claude|opencode (default: auto = every detected harness)
+  env: CLAUDE_SKILLS_DIR, OPENCODE_SKILLS_DIR override install locations
+
+  -h, --help             show this help`;

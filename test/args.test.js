@@ -43,3 +43,23 @@ test("errors: no prompt, both prompt sources, bad thinking, bad timeout, missing
 test("--help returns help", () => {
   assert.equal(parseArgs(["--help"]).help, true);
 });
+
+test("install-skill: defaults to target auto", () => {
+  const { options } = parseArgs(["install-skill"]);
+  assert.equal(options.command, "install-skill");
+  assert.equal(options.target, "auto");
+});
+
+test("install-skill: --target is honored and validated", () => {
+  assert.equal(parseArgs(["install-skill", "--target", "opencode"]).options.target, "opencode");
+  assert.equal(parseArgs(["install-skill", "--target", "claude"]).options.target, "claude");
+  assert.match(parseArgs(["install-skill", "--target", "both"]).error, /target/i);
+  assert.match(parseArgs(["install-skill", "--nope"]).error, /unexpected|unknown/i);
+});
+
+test("run parsing still works after dispatch refactor", () => {
+  const { options } = parseArgs(["run", "make a file", "--label", "x"]);
+  assert.equal(options.command, "run");
+  assert.equal(options.prompt, "make a file");
+  assert.equal(options.label, "x");
+});
