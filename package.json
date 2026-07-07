@@ -9,7 +9,6 @@
     "bin/",
     "src/",
     "skill/",
-    "scripts/install-skill.sh",
     "docs/DESIGN.md"
   ],
   "scripts": {

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { parseArgs, HELP } from "../src/args.js";
 import { invokePi } from "../src/invoke.js";
 import { parseEventStream, summarizeEvents } from "../src/parse.js";
@@ -7,6 +9,7 @@ import { detectFlags } from "../src/flags.js";
 import { snapshot, diffSnapshots } from "../src/git.js";
 import { buildRecord, writeRecord } from "../src/record.js";
 import { formatSummary } from "../src/summary.js";
+import { detectHarnesses, resolveTargets, installSkill } from "../src/install.js";
 
 const parsed = parseArgs(process.argv.slice(2));
 if (parsed.help) {
@@ -19,6 +22,29 @@ if (parsed.error) {
 }
 const options = parsed.options;
 
+if (options.command === "install-skill") {
+  const sourceDir = fileURLToPath(new URL("../skill/ornith-loop", import.meta.url));
+  const detected = detectHarnesses({
+    env: process.env,
+    homedir: homedir(),
+    exists: existsSync,
+    pathEntries: (process.env.PATH || "").split(":").filter(Boolean),
+  });
+  const targets = resolveTargets({ target: options.target, env: process.env, homedir: homedir(), detected });
+  if (targets.length === 0) {
+    process.stderr.write(
+      "orn: no coding agent detected (looked for ~/.claude and opencode).\n" +
+        "Install one, or force a target: orn install-skill --target claude|opencode\n"
+    );
+    process.exit(1);
+  }
+  for (const r of installSkill(targets, sourceDir)) {
+    process.stdout.write(`${r.method} ${r.dest} (${r.name})\n`);
+  }
+  process.exit(0);
+}
+
+// options.command === "run"
 if (options.promptFile) {
   try {
     options.prompt = readFileSync(options.promptFile, "utf8");
