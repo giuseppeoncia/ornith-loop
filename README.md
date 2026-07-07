@@ -69,10 +69,14 @@ count, and failure-mode flags. Run `orn --help` for all options.
 
 ### Skill
 
-Install the `ornith-loop` Claude Code skill (usable from any project):
+`ornith-loop` is a single `SKILL.md` that works from **any** coding agent — Claude Code or
+[opencode](https://opencode.ai). Whichever agent runs it is the external reviewer (it does
+the verification with its own model). Install it into the harness(es) you use:
 
 ```bash
-scripts/install-skill.sh   # symlinks skill/ornith-loop -> ~/.claude/skills/ornith-loop
+orn install-skill            # auto: every detected harness
+orn install-skill --target claude     # ~/.claude/skills/ornith-loop
+orn install-skill --target opencode   # ~/.config/opencode/skills/ornith-loop
 ```
 
 It encodes the method: grounding recon → minimal-scaffold prompt → `orn` run → external

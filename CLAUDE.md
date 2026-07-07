@@ -71,6 +71,8 @@ These are empirical, model-specific lessons — treat as grounding for any futur
 - `orn run "<goal + grounding>" [--workdir <repo>] [--label <name>] [--model <id>]
   [--thinking off] [--timeout <sec>] [--prompt-file <path>] [--runs-dir <path>]` —
   invoke pi against Ollama and capture a run record under `runs/`.
+- `orn install-skill [--target auto|claude|opencode]` — install the `ornith-loop` skill into
+  the detected coding agent(s) (`~/.claude/skills`, `~/.config/opencode/skills`).
 - `npm test` — run the test suite (`node --test`, zero deps).
 
 No linter configured yet.

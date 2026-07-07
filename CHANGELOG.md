@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Cross-harness skill support: the single `ornith-loop` `SKILL.md` now runs under both
+  Claude Code and opencode (the executing agent is the reviewer, using its own model), and a
+  new `orn install-skill [--target auto|claude|opencode]` command installs it into the
+  detected harness(es). Replaces `scripts/install-skill.sh`.
+
 ## [0.1.0] - 2026-07-07
 
 ### Added
