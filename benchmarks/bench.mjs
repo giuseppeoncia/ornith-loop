@@ -112,7 +112,9 @@ function cmdRun(o) {
 
   for (const repeat of repeats) {
     const wd = makeWorkdir(t);
-    const runsDir = join(wd, ".bench-runs");
+    // Run records are harness artifacts, NOT task output: keep them OUTSIDE the
+    // workdir so the oracle's scope check (git status on wd) never sees them.
+    const runsDir = mkdtempSync(join(tmpdir(), `bench-runs-${t.meta.id}-`));
     const label = `${task}-${arm}-r${round}-k${repeat}`;
     let row;
     try {
@@ -132,6 +134,7 @@ function cmdRun(o) {
       };
     } finally {
       rmSync(wd, { recursive: true, force: true });
+      rmSync(runsDir, { recursive: true, force: true });
     }
     appendFileSync(resultsFile, JSON.stringify(row) + "\n");
     process.stdout.write(`${label}: ${row.pass ? "PASS" : "fail"} (exit ${row.exit}, tools ${row.toolSequence.length}, changed ${row.changed})\n`);
