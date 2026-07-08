@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pure prompt-assembly/aggregation helpers, unit-tested in `test/bench.test.js`.
 - The `npm test` script now scopes discovery to `test/*.test.js` so the benchmark fixtures'
   intentionally-failing baseline tests are not collected into the repo's own suite.
+- Benchmark journal template (`journal/README.md`): a multi-run / multi-arm entry shape
+  (`journal/YYYY-MM-DD-benchmark-<suite>.md`) that embeds the `bench.mjs report` tables and
+  reads the H1/H2/H3 deltas against the pre-committed honest-null clause — since
+  `benchmarks/results/` is ephemeral, the numbers live in the journal.
 
 ## [0.2.0] - 2026-07-07
 
