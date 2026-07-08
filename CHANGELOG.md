@@ -30,6 +30,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`journal/YYYY-MM-DD-benchmark-<suite>.md`) that embeds the `bench.mjs report` tables and
   reads the H1/H2/H3 deltas against the pre-committed honest-null clause — since
   `benchmarks/results/` is ephemeral, the numbers live in the journal.
+- Two hard benchmark tasks, `T4-additive-hard` (add an operator threaded across two
+  coordinated files) and `T6-inplace-hard` (in-place signature refactor across two files with
+  a byte-exact corruption guard), added after the pilot saturated on the easy/medium suite so
+  H1 (don't-steal-the-nest) and H3 (loop) could actually be exercised; oracles validated
+  out-of-band (base-fails / gold-passes / corrupted-or-unscoped-fail) and frozen before running.
+- `## Benchmark results` section in the README: a compact per-task success-rate table and an
+  honest reading — grounding lifts success on every non-trivial task (+80 on in-place-hard),
+  correcting with facts beats correcting with steps (2/2 vs 0/2 recovered), while loop and
+  heavy-scaffold rate deltas stay noise-bound at K=5.
+- Pilot results recorded in `journal/2026-07-08-benchmark-pilot.md` (T1–T3 plus the T4/T6
+  hard extension), including the corrective-round finding and a data-integrity incident note.
+
+### Fixed
+- Benchmark driver wrote each run's `orn` records to `.bench-runs/` inside the task workdir,
+  so every scope-checking oracle counted that directory as a stray changed file and failed the
+  run (a false 0/20 on `T1-scratch` despite byte-exact output). Run records now go to a temp
+  dir outside the workdir and are cleaned up alongside it.
+
+### Removed
+- The `Repo layout` section from the README (low signal; the design doc and directory names
+  carry it).
 
 ## [0.2.0] - 2026-07-07
 

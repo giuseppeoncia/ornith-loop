@@ -138,15 +138,3 @@ per-arm breakdown, failure-mode flags, and threats to validity.
   (default `ornith-1.0-9b-64k`), registered as the `ollama` provider in
   `~/.pi/agent/models.json`
 - Node (v24+)
-
-## Repo layout
-
-```
-docs/DESIGN.md   design & rationale (source of truth)
-README.md        this file
-CHANGELOG.md     Keep a Changelog format
-CLAUDE.md        guidance for Claude Code working in this repo
-bin/, src/       the `orn` CLI
-skill/           the `ornith-loop` cross-harness skill (see Skill section above)
-journal/         experiment journal (per-run entries; see journal/README.md)
-```
