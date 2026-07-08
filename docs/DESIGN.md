@@ -118,6 +118,12 @@ Claude (skill) --grounding+goal prompt--> orn --> pi -p (--mode json) --> ornith
 
 ## Success criteria
 
+These criteria are operationalized into a controlled, falsifiable experiment in
+[`BENCHMARK.md`](BENCHMARK.md) — four arms (full method vs bare ornith / heavy-scaffold /
+single-shot) that measure whether the method lifts ornith's task **success rate**, with a
+pre-committed honest-null clause so "usability wrapper, not performance multiplier" is a
+valid outcome.
+
 - Re-running today's kind of task takes one `ornith-loop` invocation, not ad-hoc manual steps.
 - Every run yields an observability summary showing ornith's self-built tool sequence and
   any failure-mode flags.

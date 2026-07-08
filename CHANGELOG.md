@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Benchmark design (`docs/BENCHMARK.md`): a controlled experiment that measures whether the
+  `ornith-loop` method lifts a self-scaffolding model's task **success rate** (not cost) —
+  four arms (full method vs bare ornith, heavy-scaffold, and single-shot) testing the
+  "don't steal the nest" / wrapper-value / loop-value hypotheses, a failure-mode-exercising
+  task suite with machine-checkable oracles, repeat-based metrics, and a pre-committed
+  honest-null clause that lets "usability wrapper, not performance multiplier" be a
+  publishable conclusion. Design only — no runner implemented yet.
+
 ## [0.2.0] - 2026-07-07
 
 ### Added
