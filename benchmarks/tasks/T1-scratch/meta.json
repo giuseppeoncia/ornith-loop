@@ -1,0 +1,8 @@
+{
+  "id": "T1-scratch",
+  "editMode": "write-from-scratch",
+  "difficulty": "easy",
+  "testCmd": ["node", "fizzbuzz.mjs"],
+  "allowedChangedFiles": ["fizzbuzz.mjs"],
+  "note": "Control ceiling — ornith's known-clean case. If arms tie here, that is expected."
+}

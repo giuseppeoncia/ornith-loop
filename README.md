@@ -90,6 +90,47 @@ with evidence.
 **Non-goals:** token/cost savings (Claude-as-reviewer does not save them, by design);
 production automation; a local reviewer model; auto-escalation or a scaffold "dial".
 
+## Benchmark results
+
+Does the method actually raise ornith's **task success rate**, or is it just a convenient
+wrapper? We measure it directly: each task runs under four arms, and a mechanical **oracle**
+(runs the code / tests, checks the change is scoped) — never the model's own "done!" — scores
+each attempt. Full design in [`docs/BENCHMARK.md`](docs/BENCHMARK.md), runs in
+[`journal/`](journal/).
+
+**Arms:** `A` = goal + **grounding** (facts it can't derive), with a corrective loop ·
+`B1` = bare goal · `B2` = grounding + heavy step-by-step scaffold · `B3` = grounding, single
+shot. So `A−B1` isolates grounding, `A−B2` isolates minimal-vs-heavy scaffold, `A−B3` the loop.
+
+_Pilot · `ornith-1.0-9b-64k` · K=5 repeats per cell · success rate (%)_
+
+| Task (edit mode)     | A (method) | B1 (bare) | B2 (heavy) | **A−B1** (grounding) |
+|----------------------|:----------:|:---------:|:----------:|:--------------------:|
+| T1 scratch (easy)    |    100     |    80     |    100     |        **+20**       |
+| T2 additive (med)    |    100     |    100    |    100     |          0           |
+| T3 in-place (med)    |    100     |    60     |    100     |        **+40**       |
+| T4 additive (hard)   |    100     |    60     |     60     |        **+40**       |
+| T6 in-place (hard)   |    100     |    20     |    100     |        **+80**       |
+
+**What the numbers say (honestly):**
+
+- ✅ **Grounding earns its keep.** Giving ornith the facts it can't derive lifts success on
+  every non-trivial task, most on the hard in-place case (+80) — exactly where ornith's known
+  failure modes (wrong filename, stalls, **in-place token corruption**) fire. On easy tasks
+  everything ties: there the method is a pure usability wrapper, and we say so.
+- ✅ **Correcting with _facts_ beats correcting with _steps_.** On the hard tasks, arm A's
+  round-2 (add grounding) recovered **2/2** failed repeats; arm B2's round-2 (add scaffold)
+  recovered **0/2** — extra step-by-step even introduced syntax errors. Small N, but it points
+  the way the thesis predicts: don't steal the nest.
+- ➖ **Not yet proven:** that the loop beats a single shot, and that minimal beats heavy
+  scaffold, in the *final rates* — at K=5 a ±40 delta is ±2 runs (noise). Needs larger K.
+- 🔎 **The observability itself already paid off:** the harness caught ornith confabulating
+  success, caught the in-place corruption via a byte-guard, and even surfaced a bug in our own
+  oracle. You stop trusting a lying model's self-report.
+
+See [`journal/2026-07-08-benchmark-pilot.md`](journal/2026-07-08-benchmark-pilot.md) for the
+per-arm breakdown, failure-mode flags, and threats to validity.
+
 ## Requirements
 
 - [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) on `PATH`
@@ -97,15 +138,3 @@ production automation; a local reviewer model; auto-escalation or a scaffold "di
   (default `ornith-1.0-9b-64k`), registered as the `ollama` provider in
   `~/.pi/agent/models.json`
 - Node (v24+)
-
-## Repo layout
-
-```
-docs/DESIGN.md   design & rationale (source of truth)
-README.md        this file
-CHANGELOG.md     Keep a Changelog format
-CLAUDE.md        guidance for Claude Code working in this repo
-bin/, src/       the `orn` CLI
-skill/           the `ornith-loop` cross-harness skill (see Skill section above)
-journal/         experiment journal (per-run entries; see journal/README.md)
-```

@@ -16,7 +16,7 @@
     "docs/DESIGN.md"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\""
   },
   "keywords": [
     "ornith",
@@ -28,7 +28,7 @@
     "cli"
   ],
   "author": "Giuseppe Oncia",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/giuseppeoncia/ornith-loop.git"
