@@ -1,0 +1,8 @@
+{
+  "id": "T2-additive",
+  "editMode": "additive",
+  "difficulty": "medium",
+  "testCmd": ["node", "--test"],
+  "allowedChangedFiles": ["src/mathx.mjs"],
+  "note": "Additive is ornith's other clean-ish case; the test for mul already exists and fails until mul is added."
+}

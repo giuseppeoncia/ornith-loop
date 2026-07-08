@@ -1,4 +1,5 @@
 node_modules/
 runs/
+benchmarks/results/
 *.log
 .DS_Store

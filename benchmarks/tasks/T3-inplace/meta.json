@@ -1,0 +1,8 @@
+{
+  "id": "T3-inplace",
+  "editMode": "in-place",
+  "difficulty": "medium",
+  "testCmd": ["node", "--test"],
+  "allowedChangedFiles": ["src/greet.mjs"],
+  "note": "Targets ornith's known in-place corruption mode. The shout() test guards against token-level damage elsewhere in the file even though only greet() is the target."
+}

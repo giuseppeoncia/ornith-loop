@@ -14,7 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "don't steal the nest" / wrapper-value / loop-value hypotheses, a failure-mode-exercising
   task suite with machine-checkable oracles, repeat-based metrics, and a pre-committed
   honest-null clause that lets "usability wrapper, not performance multiplier" be a
-  publishable conclusion. Design only — no runner implemented yet.
+  publishable conclusion.
+- Benchmark pilot harness (`benchmarks/`, Phase 1 of the design): a `bench.mjs` driver that
+  restores a task fixture git-clean, assembles each arm's prompt mechanically, invokes
+  `orn run`, scores with the task's `oracle.mjs` (hard pass/fail over workdir + run-record
+  JSON, never agent prose), and aggregates `pass@1`/`pass@N`/rounds-to-pass and the H1/H2/H3
+  deltas; three fixtures spanning the edit modes (`T1-scratch`, `T2-additive`, `T3-inplace`,
+  the last targeting ornith's in-place corruption mode) each with a verified oracle; and a
+  local runbook (`benchmarks/README.md`) — the corrective loop stays agent-driven. Runs on a
+  real ollama+pi+ornith workstation, not in a remote container. `src/bench.js` holds the
+  pure prompt-assembly/aggregation helpers, unit-tested in `test/bench.test.js`.
+- The `npm test` script now scopes discovery to `test/*.test.js` so the benchmark fixtures'
+  intentionally-failing baseline tests are not collected into the repo's own suite.
 
 ## [0.2.0] - 2026-07-07
 
