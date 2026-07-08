@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `Repo layout` section from the README (low signal; the design doc and directory names
   carry it).
 
+### Changed
+- Project license changed from MIT to Apache-2.0 (`LICENSE`, the `license` field in
+  `package.json`, and the `ornith-loop` skill frontmatter).
+
 ## [0.2.0] - 2026-07-07
 
 ### Added
