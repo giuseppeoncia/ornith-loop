@@ -79,10 +79,13 @@ function runOrn({ prompt, workdir, model, label, runsDir }) {
   const argv = [ORN, "run", prompt, "--workdir", workdir, "--label", label, "--runs-dir", runsDir];
   if (model) argv.push("--model", model);
   const res = spawnSync(process.execPath, argv, { encoding: "utf8", env: process.env });
-  const m = (res.stdout || "").match(/record:\s*(\S+)/);
-  let record = null;
-  if (m && existsSync(m[1])) record = JSON.parse(readFileSync(m[1], "utf8"));
-  return { record, stdout: res.stdout, stderr: res.stderr, status: res.status };
+  // Match the record path on its OWN line: orn prints the model's finalText (which may
+  // itself contain "record:") before the trailing `record: <path>` line, so an unanchored
+  // match can be hijacked by model output.
+  const m = (res.stdout || "").match(/^record:\s*(\S+)/m);
+  const recordPath = m && existsSync(m[1]) ? m[1] : "";
+  const record = recordPath ? JSON.parse(readFileSync(recordPath, "utf8")) : null;
+  return { record, recordPath, stdout: res.stdout, stderr: res.stderr, status: res.status };
 }
 
 function runOracle(task, workdir, recordPath) {
@@ -119,7 +122,7 @@ function cmdRun(o) {
     let row;
     try {
       const orn = runOrn({ prompt, workdir: wd, model, label, runsDir });
-      const recPath = orn.record ? join(runsDir, `${orn.record.runId}.json`) : "";
+      const recPath = orn.recordPath;
       const oracle = runOracle(t, wd, recPath);
       row = {
         task, arm, repeat, round,

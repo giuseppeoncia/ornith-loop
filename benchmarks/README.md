@@ -58,6 +58,15 @@ node benchmarks/bench.mjs run --task T1-scratch --arm A  --repeats 5   # records
 node benchmarks/bench.mjs run --task T1-scratch --arm B2 --repeats 5
 ```
 
+> **Re-running accumulates — wipe between campaigns.** Each `run` *appends* to
+> `results/<task>__<arm>.jsonl` and numbers repeats from 1 on every invocation, while
+> `report` groups by repeat number. So running the same `(task, arm)` twice does **not** give
+> you `2×K` independent samples: the second run's repeats `1..K` collide with the first's and
+> get merged into the same buckets, skewing `pass@1`/`pass@N`. Run each `(task, arm)` once with
+> the full `K` you want, and `rm -rf benchmarks/results` before starting a fresh campaign.
+> (Corrective rounds are the exception — they add a `--round 2` row for a specific `--repeat`,
+> which `report` folds into that repeat's rounds-to-pass.)
+
 ## Running the corrective rounds (agent-driven)
 
 For any A/B2 repeat that failed round 1, you (or the reviewing agent) inspect the run

@@ -47,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so every scope-checking oracle counted that directory as a stray changed file and failed the
   run (a false 0/20 on `T1-scratch` despite byte-exact output). Run records now go to a temp
   dir outside the workdir and are cleaned up alongside it.
+- `src/bench.js` used a literal NUL byte as the `aggregate()` grouping-key separator, which
+  made git treat the whole driver-helper file as binary (hidden from diffs/PR review). Replaced
+  with a space.
+- Benchmark driver matched the run-record path with an unanchored `record:` regex, so model
+  output containing the substring `record:` (printed in `final text:` before the real
+  `record: <path>` line) could hijack the match and null out the run record — losing the
+  flags/tool-sequence/exit observability the benchmark exists to collect. Anchored the match to
+  the start of a line and reused the parsed path.
 
 ### Removed
 - The `Repo layout` section from the README (low signal; the design doc and directory names
