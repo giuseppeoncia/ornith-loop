@@ -1,6 +1,6 @@
 {
   "name": "ornith-loop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Observable pi-invocation harness for self-scaffolding local models (ornith), with Claude as external reviewer.",
   "type": "module",
   "bin": {
@@ -16,7 +16,7 @@
     "docs/DESIGN.md"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\""
   },
   "keywords": [
     "ornith",
@@ -28,7 +28,7 @@
     "cli"
   ],
   "author": "Giuseppe Oncia",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/giuseppeoncia/ornith-loop.git"

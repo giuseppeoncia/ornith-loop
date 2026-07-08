@@ -23,7 +23,7 @@ test("SKILL.md frontmatter has the required, harness-recognized fields", () => {
   const { fm } = frontmatter(skill);
   assert.equal(fm.name, "ornith-loop");
   assert.ok(fm.description && fm.description.length > 20, "non-empty description");
-  assert.equal(fm.license, "MIT");
+  assert.equal(fm.license, "Apache-2.0");
 });
 
 test("SKILL.md body is host-neutral (cross-harness framing, no host-locked phrases)", () => {

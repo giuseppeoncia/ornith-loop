@@ -1,0 +1,8 @@
+{
+  "id": "T6-inplace-hard",
+  "editMode": "in-place",
+  "difficulty": "hard",
+  "testCmd": ["node", "--test"],
+  "allowedChangedFiles": ["src/pricing.mjs", "src/checkout.mjs"],
+  "note": "In-place signature refactor threaded across two files and two call sites. roundCents is the byte-exact corruption guard. Targets ornith's in-place corruption mode at higher difficulty than T3-inplace."
+}

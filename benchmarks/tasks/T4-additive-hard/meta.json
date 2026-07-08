@@ -1,0 +1,8 @@
+{
+  "id": "T4-additive-hard",
+  "editMode": "additive",
+  "difficulty": "hard",
+  "testCmd": ["node", "--test"],
+  "allowedChangedFiles": ["src/ops.mjs", "src/registry.mjs"],
+  "note": "Additive but threaded across two coordinated files (implementation in ops.mjs + registration in registry.mjs). A 9b may implement pow yet forget to register it, register a mismatched token, or edit only one file."
+}
