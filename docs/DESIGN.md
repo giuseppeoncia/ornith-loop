@@ -25,11 +25,36 @@ A hard-won lesson: supplying facts is not the same as imposing scaffold.
 |---|---|---|
 | **Reasoning scaffold** — plan, tool sequence, error recovery | **Ornith** (do NOT impose) | What pi leaves room for; the wrapper must not take it away |
 | **Grounding / context** — real paths, versions, routes, selectors, conventions | The wrapper | Knowledge the model cannot derive. Providing it ≠ thinking for it |
-| **Verification & observability** — what it did, where it broke | The wrapper (Claude) | The real value, and what makes the experiment measurable |
+| **Verification & observability** — what it did, where it broke | The wrapper (two-tier; see below) | The real value, and what makes the experiment measurable |
 
 Guiding principle: **minimal imposed scaffold, maximal grounding, observability and
 verification at the centre.** Give ornith the goal plus the grounding it cannot know,
 then let it build its own nest — and measure how well it does.
+
+### Two-tier verification
+
+Verification is split into two layers, and the split is what keeps it trustworthy:
+
+- **Layer 0 — the mechanical oracle.** Deterministic, local, no LLM: run the tests, check
+  the diff is in scope (`git status`), byte-guard against in-place corruption. Exit 0 = pass.
+  It reads the workdir and the `runs/<id>.json` record — **never any agent's prose**. This is
+  the anchor of truth (`benchmarks/tasks/*/oracle.mjs`). On real tasks that ship no oracle,
+  the *mechanical* part (running tests, computing the diff) is still done by the host, not a
+  model.
+- **Layer 1 — the LLM reviewer.** Judgement the oracle can't encode: is the diff in scope for
+  *this* goal, is there corruption, what corrective grounding is missing. Runs **local-first**
+  — a lightweight Ollama verifier model adjudicates a ground-truth evidence packet
+  (`verifier/rubric.md`) and returns `pass` / `fail` / `uncertain`. A `pass` is accepted;
+  `fail` and `uncertain` **escalate to the Claude audit tier**. The `uncertain` state is the
+  safety valve: a model unsure of a run escalates instead of guessing, so a real failure is
+  never silently green-lit.
+
+Why the tiers, not a single local judge: a local model in the reviewing seat has been
+observed to confabulate (`BENCHMARK.md` — qwen-35b misread a run record). Since ornith itself
+confabulates, two confabulators would erase the only independent check. The mechanical oracle
+plus the escalate-on-doubt rule preserve it. Which local model is safe *enough* to be the
+first pass is decided empirically (`docs/VERIFIER.md`), by its **false-pass rate** against the
+oracle — not by assumption.
 
 ## Goal & non-goals
 
@@ -38,12 +63,20 @@ models (ornith first) under pi, learn which grounding/prompts let their self-sca
 succeed, and capture that knowledge.
 
 **Non-goals:**
-- Not a token/cost optimisation (Claude-as-reviewer does not save Anthropic tokens; that
-  was measured and accepted).
+- Not a token/cost optimisation.
 - Not a production automation tool.
-- No local reviewer model (review is Claude, by choice).
 - No auto-escalation, no configurable "scaffold dial" (philosophy is fixed: minimal
   scaffold).
+
+**Superseded non-goal (kept for the record).** Earlier design forbade a *local reviewer
+model* ("review is Claude, by choice"). That is now qualified: verification is **two-tier**
+(see below). Layer 0 — the mechanical oracle — was always local; Layer 1 — the LLM reviewer
+— may run **local-first** (a lightweight Ollama model as first pass) with Claude retained as
+the audit/fallback tier for `fail`/`uncertain` verdicts. The change is explicitly *not* about
+cost (cost/speed remain non-goals; the executor↔verifier model-swap cost on a single GPU is
+accepted). It exists to let the harness run **without a remote LLM in the common path**,
+while keeping an independent check — because a local model in the reviewing seat has been
+observed to confabulate (see `BENCHMARK.md`), so it cannot be the *only* judge.
 
 ## Architecture
 
@@ -90,7 +123,8 @@ Steps the host agent follows:
 2. **Author a minimal-scaffold prompt**: goal + grounding, *not* step-by-step micro-tasks.
 3. **Run** via `orn`; let ornith self-scaffold.
 4. **Verify externally**: build / tests / diff / rendered output — never trust ornith's
-   self-report (it confabulates success).
+   self-report (it confabulates success). Optionally offload the first pass to a local
+   verifier model (two-tier verification, above); audit its `fail`/`uncertain` yourself.
 5. **Corrective round if needed**: add *grounding*, not scaffold; bounded to `N` rounds
    (default 3). If still failing, report the failure mode rather than spoon-feeding.
 6. **Journal** the observations.
@@ -108,13 +142,60 @@ knowledge — the primary deliverable of the "learning" goal.
 
 ## Data flow
 
+The diagram below captures both the **architecture** (the three components) and the
+**operating loop** (the skill's numbered steps 1–6). The golden rule is visible in it:
+ornith **self-scaffolds** (the pi → Ollama stack), the host supplies only **grounding** on
+corrective rounds (never scaffold), and **verification is two-tier** with the mechanical
+oracle as the anchor of truth.
+
+```mermaid
+flowchart TB
+    subgraph HOST["Coding agent = external reviewer (Claude Code / opencode)"]
+        G["1· Grounding recon<br/>paths · versions · routes · selectors"]
+        P["2· Minimal-scaffold prompt<br/>goal + grounding — never step-by-step"]
+        DEC{"Pass?"}
+        C["5· Add grounding, never scaffold<br/>bounded loop · default 3 rounds"]
+        J[("6· journal/YYYY-MM-DD-*.md<br/>the learning deliverable")]
+        G --> P
+        DEC -->|"fail / uncertain · round &lt; 3"| C --> P
+        DEC -->|"pass · or rounds exhausted"| J
+    end
+
+    subgraph ORN["orn · thin Node CLI — no prompt authoring, no judging"]
+        INV["invoke pi<br/>--provider ollama --model &lt;id&gt;<br/>--thinking off --mode json"]
+        TO["kill-timer timeout<br/>(macOS has no 'timeout')"]
+        REC[("runs/&lt;id&gt;.json<br/>tool sequence · flags · finalText")]
+        INV --> TO --> PARSE["parse jsonl event stream"] --> REC
+    end
+
+    subgraph STACK["pi harness → Ollama · local, unsandboxed"]
+        PI["pi — imposes no scaffold<br/>read / bash / edit / write tools"]
+        EX[["ornith-1.0-9b<br/>self-scaffolds: plan · tools · recovery"]]
+        PI --> EX
+    end
+
+    subgraph VERIFY["4· Verification — Claude's job"]
+        L0["Layer 0 · mechanical oracle<br/>tests + diff + changed files = GOLD"]
+        L1["Layer 1 · local verifier model<br/>orn run --no-tools, read-only<br/>adjudicates evidence packet, replies inline"]
+        VV{"verdict"}
+        L0 -. "anchors — a red test overrides any model verdict" .-> L1
+        L1 --> VV
+        VV -->|pass| ACC["auto-accept"]
+        VV -->|"fail / uncertain"| ESC["escalate to Claude audit tier"]
+    end
+
+    P -->|"3· orn run"| INV
+    INV --> PI
+    EX --> PARSE
+    REC --> L0
+    ACC --> DEC
+    ESC --> DEC
 ```
-Claude (skill) --grounding+goal prompt--> orn --> pi -p (--mode json) --> ornith (ollama)
-      ^                                     |
-      |            run record + summary <---+  (tool-call sequence, flags, final text)
-      |
-      +-- external verification (build/test/diff) --> journal entry --> (loop if needed)
-```
+
+The evidence packet Layer 1 adjudicates is **ground truth only** — test output, diff,
+changed-file list, and `orn` run signals. It deliberately excludes ornith's own prose (it
+confabulates) and the task answer-key (the model must infer scope, as it must on a real
+task). See [`VERIFIER.md`](VERIFIER.md).
 
 ## Success criteria
 

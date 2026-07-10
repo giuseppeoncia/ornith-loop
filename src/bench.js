@@ -100,6 +100,17 @@ export function aggregate(rows) {
   return report;
 }
 
+// caffeinate argv to keep a Mac awake for a long run, or null off darwin.
+// A sweep spans hours; if the Mac idle-sleeps mid-run it truncates the in-flight
+// orn call into a spurious timeout / no-change "fail" (observed 2026-07-11 — four
+// K=20 rows contaminated). `-i` prevents idle system sleep, `-m` disk idle sleep,
+// `-s` system sleep on AC; `-w <pid>` releases the assertion when our process
+// exits, so no cleanup is needed. caffeinate is macOS-only → null elsewhere.
+export function caffeinateArgs(platform, pid) {
+  if (platform !== "darwin") return null;
+  return ["-i", "-m", "-s", "-w", String(pid)];
+}
+
 // The three headline deltas from DESIGN.md's hypotheses, per task.
 //   H2 = A - B1 (wrapper vs nothing); H1 = A - B2 (don't-steal-the-nest);
 //   H3 = A - B3 (loop value). Uses passNRate for looped arms, pass1Rate for B1/B3.

@@ -58,6 +58,11 @@ node benchmarks/bench.mjs run --task T1-scratch --arm A  --repeats 5   # records
 node benchmarks/bench.mjs run --task T1-scratch --arm B2 --repeats 5
 ```
 
+> **Don't let the Mac sleep.** `run` auto-wraps itself in `caffeinate -i` on macOS for the
+> duration (it prints `caffeinate active …`), because an idle sleep mid-sweep truncates the
+> in-flight `orn` call into a bogus timeout/no-change fail. If you drive `orn` directly in
+> some other long loop, prefix it with `caffeinate -i` yourself.
+
 > **Re-running accumulates — wipe between campaigns.** Each `run` *appends* to
 > `results/<task>__<arm>.jsonl` and numbers repeats from 1 on every invocation, while
 > `report` groups by repeat number. So running the same `(task, arm)` twice does **not** give
@@ -119,4 +124,32 @@ pipeline, not ornith):
 
 ```bash
 ORN_PI_BIN="$PWD/test/fixtures/fake-pi.js" node benchmarks/bench.mjs run --task T1-scratch --arm B1 --repeats 2
+```
+
+## Selecting a local verifier (Layer 1)
+
+The same driver can score a **local first-pass verifier model** against the oracle's gold
+labels — the experiment specified in [`../docs/VERIFIER.md`](../docs/VERIFIER.md). Add
+`--verifier-model <id>` to any `run`: the driver runs the oracle (gold) **and** the verifier
+(prediction) on the same workdir, feeding the model a ground-truth evidence packet built from
+`../verifier/rubric.md` (test output + diff + changed files + `orn` signals — never ornith's
+prose, never the task answer-key). Then read the scores:
+
+```bash
+node benchmarks/bench.mjs run --task T3-inplace --arm A --repeats 5 --verifier-model qwen3-coder-14b
+node benchmarks/bench.mjs verify-report
+```
+
+`verify-report` prints, per model, `agree` / `falsePass` / **`effFP`** / `escalate`, sorted
+safest-first. `effFP` (false-pass among auto-accepted passes) is the selection metric — pick
+the lightest model with `effFP ≈ 0` at an acceptable escalation rate. See VERIFIER.md for why
+false-pass is the only metric that can sink the design.
+
+Dry-run the verifier plumbing without ollama — the fake pi emits a JSON verdict when it sees
+a verifier prompt (`FAKE_PI_VERDICT` sets it, default `uncertain`):
+
+```bash
+ORN_PI_BIN="$PWD/test/fixtures/fake-pi.js" FAKE_PI_VERDICT=pass \
+  node benchmarks/bench.mjs run --task T1-scratch --arm B1 --repeats 1 --verifier-model fake
+node benchmarks/bench.mjs verify-report
 ```

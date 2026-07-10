@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 // Stub pi for tests. Echoes a fixture stream, or sleeps forever to force a timeout.
-// Controlled by env: FAKE_PI_MODE = "success" | "hang" | "crash".
+// Controlled by env: FAKE_PI_MODE = "success" | "hang" | "crash" | "utf8".
+//
+// Verifier dry-run: when the prompt carries the "# EVIDENCE PACKET" sentinel
+// (i.e. this is a Layer-1 verifier call, not an executor call), emit a JSON
+// verdict instead of the success stream — so `bench.mjs --verifier-model` is
+// exercisable end-to-end without ollama. Verdict defaults to "uncertain"
+// (the safe escalate value); override with FAKE_PI_VERDICT.
 import { readFile } from "node:fs/promises";
 
 const mode = process.env.FAKE_PI_MODE || "success";
+const isVerifierCall = process.argv.some((a) => typeof a === "string" && a.includes("# EVIDENCE PACKET"));
+
 if (mode === "crash") {
   process.stderr.write("boom\n");
   process.exit(2);
@@ -11,6 +19,17 @@ if (mode === "crash") {
   setInterval(() => {}, 1000); // never exits
 } else if (mode === "utf8") {
   process.stdout.write("ornith → café ✅ 日本語 🐦\n");
+  process.exit(0);
+} else if (isVerifierCall) {
+  const verdict = process.env.FAKE_PI_VERDICT || "uncertain";
+  const text = JSON.stringify({ verdict, evidence: ["fake-pi stub"], reason: "stubbed verifier verdict" });
+  const msg = { role: "assistant", stopReason: "stop", content: [{ type: "text", text }] };
+  const lines = [
+    { type: "session", version: 3, id: "22222222-2222-2222-2222-222222222222", timestamp: "2026-07-07T16:50:00.000Z", cwd: "/tmp/verify" },
+    { type: "agent_start" },
+    { type: "agent_end", messages: [msg] },
+  ];
+  process.stdout.write(lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
   process.exit(0);
 } else {
   const url = new URL("./ornith-success.jsonl", import.meta.url);

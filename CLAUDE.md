@@ -56,6 +56,11 @@ These are empirical, model-specific lessons — treat as grounding for any futur
   instead of doing X. Keep tasks short; verify completion yourself.
 - **macOS has no `timeout`.** Use a Node child-process kill timer (or `perl -e 'alarm N;
   exec @ARGV'` in shell).
+- **Keep the Mac awake for long runs.** A multi-hour sweep left unattended will idle-sleep,
+  which truncates the in-flight `orn` call into a spurious timeout / no-change "fail" (seen
+  2026-07-11: 4 K=20 rows contaminated). `bench.mjs run` now auto-wraps itself in
+  `caffeinate` on macOS (see `caffeinateArgs` in `src/bench.js`); for any *other* long run
+  invoked by hand, prefix it with `caffeinate -i`.
 - **pi's subprocess is not sandboxed like Claude's tools** — it can read `.env` and secrets
   the orchestrator's tools may be blocked from. Useful, but handle credentials with care;
   never persist them.

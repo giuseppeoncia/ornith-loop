@@ -32,6 +32,11 @@ test("--prompt-file sets promptFile and leaves prompt empty", () => {
   assert.equal(options.prompt, "");
 });
 
+test("--no-tools sets noTools; default is false", () => {
+  assert.equal(parseArgs(["run", "hi"]).options.noTools, false);
+  assert.equal(parseArgs(["run", "hi", "--no-tools"]).options.noTools, true);
+});
+
 test("errors: no prompt, both prompt sources, bad thinking, bad timeout, missing command", () => {
   assert.match(parseArgs(["run"]).error, /prompt/i);
   assert.match(parseArgs(["run", "hi", "--prompt-file", "p.md"]).error, /both/i);

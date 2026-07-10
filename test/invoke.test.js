@@ -14,6 +14,18 @@ test("invokePi builds the expected argv and captures stdout", async () => {
   assert.match(r.stdout, /agent_end/);
 });
 
+test("invokePi adds --no-tools before the prompt when noTools is set (prompt stays last)", async () => {
+  const r = await invokePi({ ...base, noTools: true, env: { FAKE_PI_MODE: "success" } });
+  assert.ok(r.argv.includes("--no-tools"), "argv should carry --no-tools");
+  assert.equal(r.argv[r.argv.length - 1], "hi", "prompt must remain the last argv element");
+  assert.ok(r.argv.indexOf("--no-tools") < r.argv.lastIndexOf("hi"), "--no-tools precedes the prompt");
+});
+
+test("invokePi omits --no-tools by default", async () => {
+  const r = await invokePi({ ...base, env: { FAKE_PI_MODE: "success" } });
+  assert.ok(!r.argv.includes("--no-tools"));
+});
+
 test("invokePi enforces the timeout on a hanging pi", async () => {
   const r = await invokePi({ ...base, timeoutSec: 1, env: { FAKE_PI_MODE: "hang" } });
   assert.equal(r.timedOut, true);

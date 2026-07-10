@@ -1,8 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas } from "../src/bench.js";
+import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
 
 const PARTS = { goal: "GOAL", grounding: "GROUND", scaffold: "SCAFFOLD" };
+
+test("caffeinateArgs: darwin gets an idle-sleep assertion bound to our pid; other platforms opt out", () => {
+  assert.deepEqual(caffeinateArgs("darwin", 4242), ["-i", "-m", "-s", "-w", "4242"]);
+  assert.equal(caffeinateArgs("linux", 4242), null);
+  assert.equal(caffeinateArgs("win32", 1), null);
+});
 
 test("arms: A and B2 differ only by the scaffold part; A and B3 only by loop", () => {
   assert.deepEqual(ARMS.A.parts, ["goal", "grounding"]);

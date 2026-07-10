@@ -27,6 +27,7 @@ function parseRun(args) {
     label: null,
     workdir: null,
     runsDir: "runs",
+    noTools: false,
     piBin: process.env.ORN_PI_BIN || "pi",
   };
   const positionals = [];
@@ -42,6 +43,7 @@ function parseRun(args) {
       case "--label": case "-n": opts.label = next(); break;
       case "--workdir": opts.workdir = next(); break;
       case "--runs-dir": opts.runsDir = next(); break;
+      case "--no-tools": opts.noTools = true; break;
       default:
         if (a.startsWith("-")) return { error: `unknown flag '${a}'` };
         positionals.push(a);
@@ -91,6 +93,8 @@ orn run <prompt> [options]
   --label, -n <name>     session/run label (default: slug of prompt)
   --workdir <path>       git repo to snapshot before/after (claimed-done-no-change flag)
   --runs-dir <path>      where to write run records (default: runs)
+  --no-tools             run pi with all tools disabled (read-only adjudication; used
+                         for the Layer-1 verifier so it must reply inline, never write files)
   env: ORN_PI_BIN overrides the pi binary path (default: pi)
 
 orn install-skill [options]

@@ -37,6 +37,18 @@ model. `orn` and `pi` behave identically on every host.
    flags: `claimed-done-no-change` = it said done but the workdir is untouched;
    `tool-call-as-text` = its call leaked into the reasoning channel (a `--thinking off`
    regression); `stopped-before-tool-call` = it stalled before acting.
+
+   *Optional two-tier verify (local-first).* You can offload the first pass to a lightweight
+   **local** verifier model instead of judging every run yourself. Assemble a ground-truth
+   evidence packet — test output, the diff, the changed-file list, the `orn` run signals;
+   never ornith's prose — and hand it to the verifier via `orn run --model <verifier>` with
+   `verifier/rubric.md`. It returns `pass` / `fail` / `uncertain`: accept a `pass`, and
+   **audit `fail` and `uncertain` yourself** (the mechanical checks above stay the anchor of
+   truth — a model verdict never overrides a red test or an out-of-scope diff). Pick the
+   verifier model empirically with `benchmarks/bench.mjs verify-report` (see
+   [`docs/VERIFIER.md`](../../docs/VERIFIER.md)); the metric that matters is its **false-pass
+   rate** — a verifier that green-lights a real failure is worse than none, since ornith
+   already confabulates.
 5. **Corrective round (bounded, default 3).** Add *grounding* the run revealed was missing
    — never scaffold. If it stalls narrating "now I'll do X", the task is likely too big:
    shrink the goal, keep it additive. After N rounds still failing, STOP and report the

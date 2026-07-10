@@ -17,20 +17,39 @@
 // under ORN_PI_BIN=<fake> which stubs pi for a mechanics-only dry run.
 
 import { readFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, cpSync, appendFileSync, readdirSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas } from "../src/bench.js";
+import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
+import { buildEvidencePacket, parseVerdict, scoreVerifier } from "../src/verifier.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ORN = resolve(HERE, "..", "bin", "orn.js");
 const TASKS_DIR = join(HERE, "tasks");
 const RESULTS_DIR = join(HERE, "results");
+const RUBRIC_PATH = resolve(HERE, "..", "verifier", "rubric.md");
 
 function die(msg) {
   process.stderr.write(`bench: ${msg}\n`);
   process.exit(2);
+}
+
+// Keep the Mac awake for the whole run: an idle sleep mid-sweep truncates the
+// in-flight orn call into a spurious timeout/no-change fail (journal 2026-07-11).
+// caffeinate holds the assertion until our pid exits (-w), so no cleanup is
+// needed; best-effort (missing binary or non-darwin is a silent no-op).
+function keepAwake() {
+  const args = caffeinateArgs(process.platform, process.pid);
+  if (!args) return;
+  try {
+    const child = spawn("caffeinate", args, { stdio: "ignore", detached: true });
+    child.on("error", () => {}); // caffeinate absent -> ignore
+    child.unref();
+    process.stdout.write(`bench: caffeinate active (${args.join(" ")}) — no idle sleep during this run\n`);
+  } catch {
+    /* best-effort */
+  }
 }
 
 function parseFlags(args) {
@@ -75,10 +94,12 @@ function makeWorkdir(task) {
   return wd;
 }
 
-function runOrn({ prompt, workdir, model, label, runsDir }) {
-  const argv = [ORN, "run", prompt, "--workdir", workdir, "--label", label, "--runs-dir", runsDir];
+function runOrn({ prompt, workdir, model, label, runsDir, env, noTools }) {
+  const argv = [ORN, "run", prompt, "--label", label, "--runs-dir", runsDir];
+  if (workdir) argv.push("--workdir", workdir); // verifier calls run without a workdir
   if (model) argv.push("--model", model);
-  const res = spawnSync(process.execPath, argv, { encoding: "utf8", env: process.env });
+  if (noTools) argv.push("--no-tools"); // verifier adjudicates read-only: no tools, reply inline only
+  const res = spawnSync(process.execPath, argv, { encoding: "utf8", env: env || process.env });
   // Match the record path on its OWN line: orn prints the model's finalText (which may
   // itself contain "record:") before the trailing `record: <path>` line, so an unanchored
   // match can be hijacked by model output.
@@ -98,6 +119,58 @@ function runOracle(task, workdir, recordPath) {
   return { pass: res.status === 0, output: (res.stdout || "") + (res.stderr || "") };
 }
 
+let RUBRIC_CACHE = null;
+function loadRubric() {
+  if (RUBRIC_CACHE === null) RUBRIC_CACHE = readFileSync(RUBRIC_PATH, "utf8");
+  return RUBRIC_CACHE;
+}
+
+// Gather the MECHANICAL evidence a verifier adjudicates: test output, the diff,
+// and the changed-file list — all ground truth, computed by us, never claimed
+// by ornith. Runs AFTER the oracle (which owns the gold label), so staging the
+// git index here is harmless: the workdir is discarded next.
+function gatherEvidence(task, wd) {
+  const testCmd = Array.isArray(task.meta.testCmd) && task.meta.testCmd.length ? task.meta.testCmd : ["node", "--test"];
+  const t = spawnSync(testCmd[0], testCmd.slice(1), { cwd: wd, encoding: "utf8" });
+  const testOutput = ((t.stdout || "") + (t.stderr || "")).slice(0, 4000);
+  const git = (args) => spawnSync("git", args, { cwd: wd, encoding: "utf8" });
+  git(["add", "-A"]); // stage so the diff includes new (untracked) files too
+  const diff = (git(["diff", "--cached"]).stdout || "").slice(0, 8000);
+  const status = git(["status", "--porcelain"]).stdout || "";
+  const changedFiles = status.split("\n").map((l) => l.slice(3).trim()).filter(Boolean);
+  return { testCmd, testOutput, testExitCode: t.status, diff, changedFiles };
+}
+
+// Invoke the Layer-1 verifier model on (rubric + evidence packet) and parse its
+// structured verdict. No --workdir: the verifier reads the packet, it does not
+// touch the repo. The executor's run `record` supplies the observability
+// signals (its finalText/prose is intentionally left out of the packet).
+function runVerifier({ task, wd, record, model }) {
+  const ev = gatherEvidence(task, wd);
+  const packet = buildEvidencePacket({
+    goal: task.parts.goal,
+    grounding: task.parts.grounding,
+    testCmd: ev.testCmd,
+    testOutput: ev.testOutput,
+    testExitCode: ev.testExitCode,
+    changedFiles: ev.changedFiles,
+    diff: ev.diff,
+    record,
+  });
+  const prompt = `${loadRubric()}\n\n---\n\n# EVIDENCE PACKET\n\n${packet}`;
+  const runsDir = mkdtempSync(join(tmpdir(), `bench-verify-${task.meta.id}-`));
+  try {
+    // --no-tools: the verifier reads the packet from the prompt and MUST reply
+    // inline. Without it, pi runs in the repo cwd with write tools live and a
+    // tool-eager model writes its verdict to a file (polluting the tree and
+    // scoring as unparseable -> silent uncertain). See journal 2026-07-10.
+    const orn = runOrn({ prompt, model, label: `verify-${task.meta.id}`, runsDir, noTools: true });
+    return parseVerdict(orn.record?.finalText || "");
+  } finally {
+    rmSync(runsDir, { recursive: true, force: true });
+  }
+}
+
 function cmdRun(o) {
   const task = o.task || die("--task required");
   const arm = o.arm || die("--arm required");
@@ -105,10 +178,12 @@ function cmdRun(o) {
   const round = Number(o.round || 1);
   const repeats = o.repeat ? [Number(o.repeat)] : Array.from({ length: Number(o.repeats || 1) }, (_, i) => i + 1);
   const model = typeof o.model === "string" ? o.model : undefined;
+  const verifierModel = typeof o["verifier-model"] === "string" ? o["verifier-model"] : undefined;
   const extra = typeof o.extra === "string" ? readFileSync(o.extra, "utf8") : "";
   if (round > 1 && !ARMS[arm].loop) die(`arm ${arm} is single-shot; --round ${round} is invalid`);
 
   const t = loadTask(task);
+  keepAwake(); // long run: don't let the Mac idle-sleep and truncate orn calls
   const prompt = assemblePrompt(arm, t.parts, { round, extra });
   mkdirSync(RESULTS_DIR, { recursive: true });
   const resultsFile = join(RESULTS_DIR, `${task}__${arm}.jsonl`);
@@ -135,12 +210,22 @@ function cmdRun(o) {
         runId: orn.record?.runId || null,
         model: orn.record?.model || model || null,
       };
+      // Optional Layer-1 verifier pass: adjudicate the same run while the
+      // workdir still exists. The oracle's `pass` stays the gold label; the
+      // verifier's verdict is scored against it by `verify-report`.
+      if (verifierModel) {
+        const v = runVerifier({ task: t, wd, record: orn.record, model: verifierModel });
+        row.verifierModel = verifierModel;
+        row.verifierVerdict = v.verdict;
+        row.verifierReason = v.reason;
+      }
     } finally {
       rmSync(wd, { recursive: true, force: true });
       rmSync(runsDir, { recursive: true, force: true });
     }
     appendFileSync(resultsFile, JSON.stringify(row) + "\n");
-    process.stdout.write(`${label}: ${row.pass ? "PASS" : "fail"} (exit ${row.exit}, tools ${row.toolSequence.length}, changed ${row.changed})\n`);
+    const vtag = row.verifierVerdict ? `, verifier ${row.verifierVerdict}` : "";
+    process.stdout.write(`${label}: ${row.pass ? "PASS" : "fail"} (exit ${row.exit}, tools ${row.toolSequence.length}, changed ${row.changed}${vtag})\n`);
   }
 }
 
@@ -189,12 +274,39 @@ function cmdReport() {
   process.stdout.write("\nH1 = don't-steal-the-nest · H2 = wrapper vs nothing · H3 = loop value\n");
 }
 
+// Score the Layer-1 verifier against the oracle's gold labels (docs/VERIFIER.md).
+// The selection metric is effFP (effectiveFalsePass) = P(oracle fail | verdict
+// pass): how often an auto-accepted `pass` was actually wrong. Pick the lightest
+// model with effFP ≈ 0 at an acceptable escalation rate.
+function cmdVerifyReport() {
+  const rows = loadRows().filter((r) => r.verifierVerdict);
+  if (!rows.length) return process.stdout.write("no verifier results yet (run some arms with --verifier-model <id>)\n");
+  const scored = scoreVerifier(rows);
+
+  process.stdout.write("\nVerifier vs oracle (sorted safest-first)\n");
+  process.stdout.write("model                          n  agree  falsePass  effFP  escalate\n");
+  for (const s of scored) {
+    process.stdout.write(
+      `${String(s.model).padEnd(28)} ${String(s.n).padStart(3)}  ${pct(s.agreementRate)}   ${pct(s.falsePassRate)}   ${pct(s.effectiveFalsePass)}   ${pct(s.escalationRate)}\n`
+    );
+  }
+  process.stdout.write(
+    "\neffFP = false-pass among auto-accepted passes (the safety metric; want ≈0)\n" +
+      "escalate = share routed to the Claude audit tier (fail + uncertain)\n"
+  );
+}
+
 const argv = process.argv.slice(2);
 const cmd = argv[0];
 const opts = parseFlags(argv.slice(1));
 if (cmd === "run") cmdRun(opts);
 else if (cmd === "report") cmdReport();
+else if (cmd === "verify-report") cmdVerifyReport();
 else {
-  process.stdout.write("usage: node benchmarks/bench.mjs run --task <id> --arm <A|B1|B2|B3> [--repeats N] [--model id] [--round N --extra file --repeat K]\n       node benchmarks/bench.mjs report\n");
+  process.stdout.write(
+    "usage: node benchmarks/bench.mjs run --task <id> --arm <A|B1|B2|B3> [--repeats N] [--model id] [--verifier-model id] [--round N --extra file --repeat K]\n" +
+      "       node benchmarks/bench.mjs report\n" +
+      "       node benchmarks/bench.mjs verify-report\n"
+  );
   process.exit(cmd ? 2 : 0);
 }
