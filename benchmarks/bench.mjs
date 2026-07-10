@@ -17,11 +17,11 @@
 // under ORN_PI_BIN=<fake> which stubs pi for a mechanics-only dry run.
 
 import { readFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, cpSync, appendFileSync, readdirSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas } from "../src/bench.js";
+import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
 import { buildEvidencePacket, parseVerdict, scoreVerifier } from "../src/verifier.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +33,23 @@ const RUBRIC_PATH = resolve(HERE, "..", "verifier", "rubric.md");
 function die(msg) {
   process.stderr.write(`bench: ${msg}\n`);
   process.exit(2);
+}
+
+// Keep the Mac awake for the whole run: an idle sleep mid-sweep truncates the
+// in-flight orn call into a spurious timeout/no-change fail (journal 2026-07-11).
+// caffeinate holds the assertion until our pid exits (-w), so no cleanup is
+// needed; best-effort (missing binary or non-darwin is a silent no-op).
+function keepAwake() {
+  const args = caffeinateArgs(process.platform, process.pid);
+  if (!args) return;
+  try {
+    const child = spawn("caffeinate", args, { stdio: "ignore", detached: true });
+    child.on("error", () => {}); // caffeinate absent -> ignore
+    child.unref();
+    process.stdout.write(`bench: caffeinate active (${args.join(" ")}) — no idle sleep during this run\n`);
+  } catch {
+    /* best-effort */
+  }
 }
 
 function parseFlags(args) {
@@ -166,6 +183,7 @@ function cmdRun(o) {
   if (round > 1 && !ARMS[arm].loop) die(`arm ${arm} is single-shot; --round ${round} is invalid`);
 
   const t = loadTask(task);
+  keepAwake(); // long run: don't let the Mac idle-sleep and truncate orn calls
   const prompt = assemblePrompt(arm, t.parts, { round, extra });
   mkdirSync(RESULTS_DIR, { recursive: true });
   const resultsFile = join(RESULTS_DIR, `${task}__${arm}.jsonl`);

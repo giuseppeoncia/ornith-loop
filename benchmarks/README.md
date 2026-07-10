@@ -58,6 +58,11 @@ node benchmarks/bench.mjs run --task T1-scratch --arm A  --repeats 5   # records
 node benchmarks/bench.mjs run --task T1-scratch --arm B2 --repeats 5
 ```
 
+> **Don't let the Mac sleep.** `run` auto-wraps itself in `caffeinate -i` on macOS for the
+> duration (it prints `caffeinate active …`), because an idle sleep mid-sweep truncates the
+> in-flight `orn` call into a bogus timeout/no-change fail. If you drive `orn` directly in
+> some other long loop, prefix it with `caffeinate -i` yourself.
+
 > **Re-running accumulates — wipe between campaigns.** Each `run` *appends* to
 > `results/<task>__<arm>.jsonl` and numbers repeats from 1 on every invocation, while
 > `report` groups by repeat number. So running the same `(task, arm)` twice does **not** give
