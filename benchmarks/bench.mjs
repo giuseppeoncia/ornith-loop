@@ -77,10 +77,11 @@ function makeWorkdir(task) {
   return wd;
 }
 
-function runOrn({ prompt, workdir, model, label, runsDir, env }) {
+function runOrn({ prompt, workdir, model, label, runsDir, env, noTools }) {
   const argv = [ORN, "run", prompt, "--label", label, "--runs-dir", runsDir];
   if (workdir) argv.push("--workdir", workdir); // verifier calls run without a workdir
   if (model) argv.push("--model", model);
+  if (noTools) argv.push("--no-tools"); // verifier adjudicates read-only: no tools, reply inline only
   const res = spawnSync(process.execPath, argv, { encoding: "utf8", env: env || process.env });
   // Match the record path on its OWN line: orn prints the model's finalText (which may
   // itself contain "record:") before the trailing `record: <path>` line, so an unanchored
@@ -142,7 +143,11 @@ function runVerifier({ task, wd, record, model }) {
   const prompt = `${loadRubric()}\n\n---\n\n# EVIDENCE PACKET\n\n${packet}`;
   const runsDir = mkdtempSync(join(tmpdir(), `bench-verify-${task.meta.id}-`));
   try {
-    const orn = runOrn({ prompt, model, label: `verify-${task.meta.id}`, runsDir });
+    // --no-tools: the verifier reads the packet from the prompt and MUST reply
+    // inline. Without it, pi runs in the repo cwd with write tools live and a
+    // tool-eager model writes its verdict to a file (polluting the tree and
+    // scoring as unparseable -> silent uncertain). See journal 2026-07-10.
+    const orn = runOrn({ prompt, model, label: `verify-${task.meta.id}`, runsDir, noTools: true });
     return parseVerdict(orn.record?.finalText || "");
   } finally {
     rmSync(runsDir, { recursive: true, force: true });

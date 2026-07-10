@@ -72,6 +72,12 @@ them, sorted safest-first.
    GPU that can't hold both, each `--verifier-model` call swaps weights (executor out, verifier
    in) and back — accepted (cost/speed are non-goals). Alternatives if it bites: size both to
    co-reside, or batch all executions then all verifications.
+6. **The verifier runs read-only.** It is invoked with `orn run --no-tools`, so pi disables all
+   tools and the model's only way to answer is an inline reply. This is load-bearing: without
+   it pi runs in the driver's cwd (the repo) with write tools live, and a tool-eager verifier
+   writes its verdict to a *file* instead of returning it — polluting the tree and scoring as
+   an unparseable reply → silent `uncertain`, which confounds the escalation rate. (Regression
+   found and fixed 2026-07-10; see the journal.)
 
 ## Candidate shortlist (validate, don't assume)
 
@@ -79,11 +85,19 @@ Starting points for the first pass; the winner is whatever `verify-report` says,
 list. The adjudication load is lighter than open-ended bug-hunting because the mechanics are
 pre-computed, so a small model may suffice:
 
-- **`qwen3-coder-next`** — MoE, ~3B active / ~80B total, runs in ~16 GB; strong code
-  comprehension at a light footprint — a good swap-in verifier.
-- **`qwen3-coder-14b`** (Q4) — dense sweet-spot for modest hardware.
-- **`qwen3.6-35b-a3b-64k`** — already used in the repo as the reliable tools-capable model;
-  useful as a heavier **reference ceiling** to see how much the light models give up.
+- **`qwen3-coder:30b`** (a3b MoE, ~17 GB Q4) — the dense-ish sweet-spot for modest hardware,
+  and it co-resides with the 9.5 GB executor on a 48 GB machine (no per-run weight swap).
+- **`qwen3.5:4b`** (~3.4 GB) — a floor candidate: is even a tiny general model a safe first
+  pass? (In the 2026-07-10 campaign it was, at the lowest escalation — see the journal.)
+- **`qwen3.6-35b-a3b-64k`** (~37 GB) — already used in the repo as the reliable tools-capable
+  model; useful as a heavier **reference ceiling** to see how much the light models give up.
+  Cannot co-reside with the executor on 48 GB, so it swaps weights every call.
+
+> **Hardware note (validated 2026-07-10).** The `qwen3-coder-next` MoE is **~48 GB** at Q4
+> (an 80B model), not the ~16 GB once assumed — it exceeds a 48 GB machine and is unfit as a
+> local verifier there (its only smaller tag is `:cloud`, which is not local). `qwen3-coder`
+> ships no 14b tag; `:30b` is the real light-coder option. Validate sizes with the ollama
+> manifest before pulling.
 
 ## Success criteria for this experiment
 

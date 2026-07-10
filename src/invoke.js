@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 
 export function invokePi(opts) {
-  const { prompt, model, provider, thinking, label, timeoutSec, piBin, workdir, env, now = Date.now } = opts;
-  const argv = ["--print", "--provider", provider, "--model", model, "--thinking", thinking, "--mode", "json", "--name", label, prompt];
+  const { prompt, model, provider, thinking, label, timeoutSec, piBin, workdir, noTools, env, now = Date.now } = opts;
+  const argv = ["--print", "--provider", provider, "--model", model, "--thinking", thinking, "--mode", "json", "--name", label];
+  if (noTools) argv.push("--no-tools");
+  argv.push(prompt); // prompt must stay the last (positional) argv element
 
   return new Promise((resolve) => {
     const start = now();
