@@ -134,3 +134,54 @@ not a settled result.
   reached for a write tool instead of replying with the verdict. The rubric/harness must make
   the inline-JSON reply the *only* path (no tools available), or tool-happy models score as
   non-committal through no fault of their reasoning.
+
+## Update — 2026-07-11: K=20 confirmation on the fixed harness
+
+Two harness fixes landed after the K=5 campaign, then `qwen3.5:4b` was re-run at **K=20** on
+`T6-inplace-hard` + `T3-inplace` (arm A, executor `ornith-1.0-9b-64k`):
+
+- **Verifier now runs read-only** (`orn run --no-tools`, commit `ce04daf`) — closes the bug
+  above; the verifier can no longer write files and must reply inline. Verified live that
+  `qwen3-coder:30b` returns a parseable inline verdict under it.
+- **`bench.mjs run` auto-caffeinates on macOS** (commit `474c886`) — after an unattended idle
+  sleep truncated 4 rows of *this very run* (see the sleep-contamination note below).
+
+### Results (`verify-report`, 40 rows)
+
+```
+model         n  agree  falsePass  effFP  escalate
+qwen3.5:4b   40  100%     0%     0%    25%
+```
+
+Partitioned to separate sleep artifacts (executor `exit null`/`timeout`) from genuine runs:
+
+| subset | n | effFP | escalation | confusion |
+|---|---|---|---|---|
+| **clean (genuine runs)** | 36 | **0%** | **17%** | truePass 30 · trueFail 4 · uncertain 2 · **falsePass 0** |
+| sleep artifacts | 4 | 0% | 100% | all `oracle=fail` interrupted runs, all correctly `fail` |
+| all | 40 | 0% | 25% | falsePass 0 · agreement 100% on decided verdicts |
+
+**The mode that matters — genuine green-but-corrupt in-place diffs** (`exit completed`,
+`oracle=fail`, files changed): 4 occurred (T6 k3/k16/k20, T3 k8). **Zero were false-passed** —
+3 called `fail`, 1 escalated `uncertain`. This is exactly the evidence K=5 lacked (there, the
+light models never met this case). The `uncertain` is the *safe* outcome: it escalates to the
+Claude audit tier rather than rubber-stamping a broken diff.
+
+### Verdict: provisional → **confirmed** (on this suite)
+
+`qwen3.5:4b` is adopted as the Layer-1 first-pass verifier. effFP = 0 held at K=20 including on
+the corrupt-but-green failure mode; its true (clean) escalation is ~17%, cheap. A 3.4 GB
+general model is a safe auto-accept gate — size is not the lever, calibration is.
+
+### Caveats now resolved / still open
+
+- **Resolved:** verifier sandbox/confound bug (`--no-tools`); K raised 5→20; the corrupt-green
+  case is now actually tested; the sleep-timeout contamination (auto-caffeinate).
+- **Sleep contamination, quarantined:** `pmset` confirmed repeated Idle/Maintenance Sleep
+  during the run (Mac left unattended); 4 executor runs were truncated. They are `oracle=fail`
+  and the verifier rejected all 4, so **effFP is unaffected**; only raw escalation was inflated
+  (25% vs 17% clean). Reported both ways above rather than re-run (per decision).
+- **Still open:** only the 4b was re-run, so the per-candidate re-execution *unfairness* vs the
+  30b/ceiling is not yet removed (needs the decouple-executions change, next-step 2); and
+  cross-family lightweight verifiers (gemma3 / phi4 / llama3.1, all validated to co-reside)
+  remain untested — a focused sweep is queued pending a go-ahead.
