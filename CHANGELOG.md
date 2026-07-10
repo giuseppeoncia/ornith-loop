@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Two-tier verification with an optional **local first-pass verifier** (`docs/VERIFIER.md`,
+  `verifier/rubric.md`, `src/verifier.js`): Layer 0 stays the mechanical oracle (local, gold
+  truth); Layer 1 is an LLM reviewer that can run local-first — a lightweight Ollama model
+  adjudicates a ground-truth evidence packet (test output + diff + changed files + `orn`
+  signals, never ornith's prose, never the task answer-key) and returns `pass` / `fail` /
+  `uncertain`. `pass` is auto-accepted; `fail`/`uncertain` escalate to the Claude audit tier.
+- Verifier-selection harness: `bench.mjs run --verifier-model <id>` scores a candidate
+  verifier against the oracle on the same run, and `bench.mjs verify-report` prints
+  agreement / false-pass / **effective-false-pass** / escalation per model, sorted
+  safest-first. `effectiveFalsePass` = P(oracle fail | verdict pass) is the selection metric.
+- `ornith-loop` skill step 4 now documents the optional local-first verify flow and points
+  at the selection harness.
+
+### Changed
+- `docs/DESIGN.md`: the "no local reviewer model" non-goal is superseded by the two-tier
+  model above — explicitly not a cost change (cost/speed remain non-goals; the
+  executor↔verifier model-swap cost is accepted); the escalate-on-doubt rule preserves the
+  independent check a lone local judge would lose, given a local reviewer has been observed
+  to confabulate.
+
 ## [0.3.0] - 2026-07-08
 
 ### Added
