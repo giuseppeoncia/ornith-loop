@@ -142,13 +142,60 @@ knowledge — the primary deliverable of the "learning" goal.
 
 ## Data flow
 
+The diagram below captures both the **architecture** (the three components) and the
+**operating loop** (the skill's numbered steps 1–6). The golden rule is visible in it:
+ornith **self-scaffolds** (the pi → Ollama stack), the host supplies only **grounding** on
+corrective rounds (never scaffold), and **verification is two-tier** with the mechanical
+oracle as the anchor of truth.
+
+```mermaid
+flowchart TB
+    subgraph HOST["Coding agent = external reviewer (Claude Code / opencode)"]
+        G["1· Grounding recon<br/>paths · versions · routes · selectors"]
+        P["2· Minimal-scaffold prompt<br/>goal + grounding — never step-by-step"]
+        DEC{"Pass?"}
+        C["5· Add grounding, never scaffold<br/>bounded loop · default 3 rounds"]
+        J[("6· journal/YYYY-MM-DD-*.md<br/>the learning deliverable")]
+        G --> P
+        DEC -->|"fail / uncertain · round &lt; 3"| C --> P
+        DEC -->|"pass · or rounds exhausted"| J
+    end
+
+    subgraph ORN["orn · thin Node CLI — no prompt authoring, no judging"]
+        INV["invoke pi<br/>--provider ollama --model &lt;id&gt;<br/>--thinking off --mode json"]
+        TO["kill-timer timeout<br/>(macOS has no 'timeout')"]
+        REC[("runs/&lt;id&gt;.json<br/>tool sequence · flags · finalText")]
+        INV --> TO --> PARSE["parse jsonl event stream"] --> REC
+    end
+
+    subgraph STACK["pi harness → Ollama · local, unsandboxed"]
+        PI["pi — imposes no scaffold<br/>read / bash / edit / write tools"]
+        EX[["ornith-1.0-9b<br/>self-scaffolds: plan · tools · recovery"]]
+        PI --> EX
+    end
+
+    subgraph VERIFY["4· Verification — Claude's job"]
+        L0["Layer 0 · mechanical oracle<br/>tests + diff + changed files = GOLD"]
+        L1["Layer 1 · local verifier model<br/>orn run --no-tools, read-only<br/>adjudicates evidence packet, replies inline"]
+        VV{"verdict"}
+        L0 -. "anchors — a red test overrides any model verdict" .-> L1
+        L1 --> VV
+        VV -->|pass| ACC["auto-accept"]
+        VV -->|"fail / uncertain"| ESC["escalate to Claude audit tier"]
+    end
+
+    P -->|"3· orn run"| INV
+    INV --> PI
+    EX --> PARSE
+    REC --> L0
+    ACC --> DEC
+    ESC --> DEC
 ```
-Claude (skill) --grounding+goal prompt--> orn --> pi -p (--mode json) --> ornith (ollama)
-      ^                                     |
-      |            run record + summary <---+  (tool-call sequence, flags, final text)
-      |
-      +-- external verification (build/test/diff) --> journal entry --> (loop if needed)
-```
+
+The evidence packet Layer 1 adjudicates is **ground truth only** — test output, diff,
+changed-file list, and `orn` run signals. It deliberately excludes ornith's own prose (it
+confabulates) and the task answer-key (the model must infer scope, as it must on a real
+task). See [`VERIFIER.md`](VERIFIER.md).
 
 ## Success criteria
 
