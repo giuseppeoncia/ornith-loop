@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { OUTCOMES, parseOrchestratorOutcome, scoreOrchestrator, orchestratorDeltas } from "../src/orchestrator.js";
+import { OUTCOMES, parseOrchestratorOutcome, scoreOrchestrator, orchestratorDeltas, ROUND_ACTIONS, parseRoundDecision } from "../src/orchestrator.js";
 
 test("OUTCOMES is the closed set", () => {
   assert.deepEqual(OUTCOMES, ["done", "escalate"]);
@@ -109,4 +109,39 @@ test("orchestratorDeltas: escalations do not count as autonomous passes; missing
   assert.equal(d.autonomousPassN, 1 / 2); // 1 of 2 repeats finished autonomously
   assert.equal(d.baselinePassN, null); // no claude rows for T4
   assert.equal(d.delta, null);
+});
+
+test("ROUND_ACTIONS is the closed set", () => {
+  assert.deepEqual(ROUND_ACTIONS, ["done", "retry", "escalate"]);
+});
+
+test("parseRoundDecision: clean done", () => {
+  const d = parseRoundDecision('{"action":"done","reason":"tests green, in scope"}');
+  assert.equal(d.action, "done");
+  assert.equal(d.grounding, null);
+  assert.equal(d.reason, "tests green, in scope");
+});
+
+test("parseRoundDecision: retry carries its corrective grounding fact", () => {
+  const d = parseRoundDecision('{"action":"retry","grounding":"node --test needs no npm install","reason":"stray lockfile"}');
+  assert.equal(d.action, "retry");
+  assert.equal(d.grounding, "node --test needs no npm install");
+});
+
+test("parseRoundDecision: retry with no grounding fact degrades to escalate", () => {
+  assert.equal(parseRoundDecision('{"action":"retry"}').action, "escalate");
+  assert.equal(parseRoundDecision('{"action":"retry","grounding":"   "}').action, "escalate");
+});
+
+test("parseRoundDecision: explicit escalate, unknown action, and empty all escalate", () => {
+  assert.equal(parseRoundDecision('{"action":"escalate","reason":"can\'t diagnose"}').action, "escalate");
+  assert.equal(parseRoundDecision('{"action":"finish"}').action, "escalate");
+  assert.equal(parseRoundDecision("").action, "escalate");
+  assert.equal(parseRoundDecision(null).action, "escalate");
+});
+
+test("parseRoundDecision: JSON in prose/fences parses; a lone done in prose is accepted; ambiguity escalates", () => {
+  assert.equal(parseRoundDecision('ok:\n```json\n{"action":"DONE"}\n```').action, "done");
+  assert.equal(parseRoundDecision("I think we are done").action, "done");
+  assert.equal(parseRoundDecision("done, or maybe retry").action, "escalate");
 });

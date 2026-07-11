@@ -66,6 +66,42 @@ export function parseOrchestratorOutcome(text) {
   };
 }
 
+// The closed set of per-round loop-control actions the orchestrator can take.
+// `done` = stop, task complete; `retry` = run again with one added grounding
+// fact; `escalate` = hand to the Claude auditor. (Distinct from OUTCOMES, which
+// is the TERMINAL record: a retry chain that never resolves ends as `escalate`.)
+export const ROUND_ACTIONS = ["done", "retry", "escalate"];
+
+// Parse the orchestrator's per-round decision into { action, grounding, reason }.
+// GOLDEN RULE (mirrors parseVerdict / parseOrchestratorOutcome): anything not
+// confidently `done`, and any `retry` without a non-empty corrective grounding
+// fact, defaults to `escalate` — never fabricate a `done`, and a retry with no
+// fact to add has nothing to retry with, so route to Claude.
+export function parseRoundDecision(text) {
+  const raw = typeof text === "string" ? text : "";
+  const obj = extractJsonObject(raw);
+  const esc = (reason) => ({ action: "escalate", grounding: null, reason });
+
+  if (obj && typeof obj.action === "string") {
+    const a = obj.action.trim().toLowerCase();
+    const reason = typeof obj.reason === "string" ? obj.reason : "";
+    if (a === "done") return { action: "done", grounding: null, reason };
+    if (a === "retry") {
+      const g = typeof obj.grounding === "string" ? obj.grounding.trim() : "";
+      return g ? { action: "retry", grounding: g, reason } : esc(reason || "retry with no corrective grounding fact");
+    }
+    if (a === "escalate") return esc(reason);
+    return esc("unrecognized action; defaulting to escalate");
+  }
+
+  // Prose fallback: only a lone, unambiguous `done` is accepted (retry needs a
+  // structured grounding fact we cannot extract from prose).
+  const doneHit = /\bdone\b/i.test(raw);
+  const otherHit = /\b(retry|escalate)\b/i.test(raw);
+  if (doneHit && !otherHit) return { action: "done", grounding: null, reason: "parsed from prose (no JSON action object found)" };
+  return esc("no parseable action; defaulting to escalate (route to Claude)");
+}
+
 // Best-effort: parse the whole string, else the widest {...} slice (handles a
 // model that wraps JSON in prose or code fences). Shared shape with verifier.js.
 function extractJsonObject(text) {
