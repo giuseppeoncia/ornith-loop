@@ -187,8 +187,10 @@ export function corpusRecordFrom({
     model: r.model ?? null,
     exit: { reason: r.exit?.reason ?? null },
     toolCallCount: typeof r.toolCallCount === "number" ? r.toolCallCount : null,
-    toolSequence: Array.isArray(r.toolSequence) ? r.toolSequence : [],
-    workdirChange: r.workdirChange ? { changed: r.workdirChange.changed } : null,
+    toolSequence: Array.isArray(r.toolSequence)
+      ? r.toolSequence.map((t) => ({ name: t?.name ?? null, isError: t?.isError ?? null }))
+      : [],
+    workdirChange: r.workdirChange ? { changed: r.workdirChange.changed ?? null } : null,
     flags: r.flags || {},
   };
   return {

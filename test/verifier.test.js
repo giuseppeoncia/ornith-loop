@@ -140,3 +140,17 @@ test("corpusRecordFrom round-trips through buildEvidencePacket (same ground trut
   assert.match(packet, /exit code: 0/);
   assert.doesNotMatch(packet, /SHIP IT/);
 });
+
+test("corpusRecordFrom: slims toolSequence to name/isError, dropping model-authored args", () => {
+  const rec = corpusRecordFrom({
+    task: "T", arm: "A", repeat: 1, goldPass: true,
+    evidence: { testCmd: ["node", "--test"], testOutput: "ok", testExitCode: 0, changedFiles: [], diff: "" },
+    record: {
+      model: "ornith", exit: { reason: "completed" }, toolCallCount: 1,
+      toolSequence: [{ name: "Write", args: { path: "x.js", content: "SECRET FILE BODY" }, isError: false }],
+      workdirChange: { changed: true }, flags: {},
+    },
+  });
+  assert.deepEqual(rec.record.toolSequence, [{ name: "Write", isError: false }]);
+  assert.equal(JSON.stringify(rec).includes("SECRET FILE BODY"), false, "model-authored args must not reach the corpus");
+});
