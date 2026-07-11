@@ -16,7 +16,8 @@ there.
 | Layer-1 local **verifier** selection (`VERIFIER.md`) | `qwen3.5:4b` **confirmed** at K=20 (effFP=0%); follow-ups open |
 | **Orchestrator** design (`ORCHESTRATOR.md`) | done |
 | Orchestrator **scoring skeleton** (`src/orchestrator.js`, `orchestrate-report`) | done, unit-tested |
-| Orchestrator **agentic execution driver** (`bench.mjs orchestrate`) | **not built** (honest stub) |
+| Orchestrator **Phase-1 baseline** (Claude-in-seat, `journal/2026-07-12-orchestrator-selection.md`) | done — K=5 on T6+T4: pass@N 100%, effFS 0%; `orchestrate-report` validated |
+| Orchestrator **agentic execution driver** (`bench.mjs orchestrate`) | **not built** (honest stub) — track 2 |
 
 All of the above is committed and pushed to
 `origin/claude/lightweight-orchestrator-analysis-v9m7kc`.
@@ -27,7 +28,7 @@ All of the above is committed and pushed to
 git fetch origin claude/lightweight-orchestrator-analysis-v9m7kc
 git checkout claude/lightweight-orchestrator-analysis-v9m7kc
 git pull origin claude/lightweight-orchestrator-analysis-v9m7kc
-npm ci && npm test          # expect green (69 tests)
+npm ci && npm test          # expect green (75 tests)
 ```
 
 Prerequisites (see `benchmarks/README.md` for detail):
@@ -43,29 +44,33 @@ Prerequisites (see `benchmarks/README.md` for detail):
 
 > Continua il lavoro di ornith-loop sul branch `claude/lightweight-orchestrator-analysis-v9m7kc`.
 > Leggi `docs/ROADMAP.md`, `docs/ORCHESTRATOR.md` e la sezione "Selecting a local orchestrator"
-> di `benchmarks/README.md`. Parti dalla traccia 1 della roadmap: il pilot semi-manuale
-> dell'orchestratore — stabilisci le righe baseline (Claude-in-seat) su `T6-inplace-hard` e
-> `T4-additive-hard`, valida `bench.mjs orchestrate-report`, poi passa alla traccia 2.
-> Ollama e i modelli sono locali su questa macchina.
+> di `benchmarks/README.md`. La traccia 1 (baseline Claude-in-seat su `T6`/`T4`) è fatta —
+> vedi `journal/2026-07-12-orchestrator-selection.md`. Parti dalla traccia 2: costruisci il
+> driver agentico `bench.mjs orchestrate` (spec `ORCHESTRATOR.md §7`/§9) che mette un modello
+> locale candidato nel seggio dell'orchestratore e lo fa girare per l'intero ornith-loop,
+> emettendo una riga per (task, repeat). Ollama e i modelli sono locali su questa macchina.
 
 ## Prioritized roadmap
 
-### 1 · NOW — semi-manual orchestrator Phase-1 pilot
-Get the first *real* orchestrator data and validate the scoring end-to-end, the same way the
+### 1 · ~~semi-manual orchestrator Phase-1 pilot~~ — baseline DONE (2026-07-12)
+Got the first *real* orchestrator data and validated the scoring end-to-end, the same way the
 benchmark and verifier campaigns started (semi-manual before automation).
 
-- **Baseline (Claude-in-seat):** the session itself drives the real ornith-loop (recon →
-  minimal-scaffold prompt → `orn run` → verify → bounded corrective loop) on
-  `T6-inplace-hard` and `T4-additive-hard`, and records one row per (task, repeat) with
-  `orchestratorModel: "claude"`, its terminal `outcome` (`done`/`escalate`), and the oracle
-  gold `pass`. This establishes the reference and exercises `orchestrate-report`.
-- **Candidate half:** either (a) the **narrowed / pre-computed** path — feed a candidate a
-  hand-built recon or failure packet (verifier-style, per `ORCHESTRATOR.md §5.3`) and record
-  its decision, testable now; or (b) wait for track 2's driver for the full autonomous loop.
+- **Baseline (Claude-in-seat): done.** Claude drove the real ornith-loop (recon →
+  minimal-scaffold prompt → `orn run` → oracle verify → bounded corrective loop) on
+  `T6-inplace-hard` and `T4-additive-hard`, K=5 each. Result: **pass@N 100 %** on both,
+  **effFS 0 %**, escalation 0 %, mean 1.2 corrective rounds (2/10 repeats needed a round 2).
+  Rows: `benchmarks/results/{T6-inplace-hard,T4-additive-hard}__orch-claude.jsonl`
+  (`orchestratorModel: "claude"`). `orchestrate-report` confirmed to render both the scoring
+  rollup and the per-task delta table. Distilled in
+  `journal/2026-07-12-orchestrator-selection.md`.
+- **Still open — candidate half:** either (a) the **narrowed / pre-computed** path — feed a
+  candidate a hand-built recon or failure packet (verifier-style, per `ORCHESTRATOR.md §5.3`)
+  and record its decision, testable now; or (b) track 2's driver for the full autonomous loop.
+  This is where the delta-vs-claude table (empty at baseline) becomes the headline.
 - **Metric:** `effectiveFalseSuccess` (≈0 is the safety bar) + per-task pass@N delta vs the
   Claude baseline.
 - **Detail / commands:** `benchmarks/README.md` → "Selecting a local orchestrator".
-- **Deliverable:** distil into `journal/YYYY-MM-DD-orchestrator-selection.md`.
 
 ### 2 · NEXT — build the agentic `orchestrate` execution driver
 The missing `bench.mjs orchestrate` command: put a candidate **local** model in the
