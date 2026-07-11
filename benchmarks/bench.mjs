@@ -16,13 +16,13 @@
 // Needs a working `orn` (this repo) + pi + ollama + the target model, EXCEPT
 // under ORN_PI_BIN=<fake> which stubs pi for a mechanics-only dry run.
 
-import { readFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, cpSync, appendFileSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, cpSync, appendFileSync, readdirSync } from "node:fs";
 import { spawnSync, spawn } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
-import { buildEvidencePacket, parseVerdict, scoreVerifier } from "../src/verifier.js";
+import { buildEvidencePacket, parseVerdict, scoreVerifier, corpusRecordFrom } from "../src/verifier.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ORN = resolve(HERE, "..", "bin", "orn.js");
@@ -141,30 +141,21 @@ function gatherEvidence(task, wd) {
   return { testCmd, testOutput, testExitCode: t.status, diff, changedFiles };
 }
 
-// Invoke the Layer-1 verifier model on (rubric + evidence packet) and parse its
-// structured verdict. No --workdir: the verifier reads the packet, it does not
-// touch the repo. The executor's run `record` supplies the observability
-// signals (its finalText/prose is intentionally left out of the packet).
-function runVerifier({ task, wd, record, model }) {
-  const ev = gatherEvidence(task, wd);
+// Adjudicate a pre-gathered evidence bundle with a verifier model, read-only.
+// Shared by the coupled `run --verifier-model` path and `verify-corpus`. The
+// verifier reads the packet from the prompt (no --workdir) and MUST reply inline
+// (--no-tools): otherwise pi runs in the repo cwd with write tools live and a
+// tool-eager model writes its verdict to a file (journal 2026-07-10).
+function adjudicate({ goal, grounding, evidence, record, model, label }) {
   const packet = buildEvidencePacket({
-    goal: task.parts.goal,
-    grounding: task.parts.grounding,
-    testCmd: ev.testCmd,
-    testOutput: ev.testOutput,
-    testExitCode: ev.testExitCode,
-    changedFiles: ev.changedFiles,
-    diff: ev.diff,
-    record,
+    goal, grounding,
+    testCmd: evidence.testCmd, testOutput: evidence.testOutput, testExitCode: evidence.testExitCode,
+    changedFiles: evidence.changedFiles, diff: evidence.diff, record,
   });
   const prompt = `${loadRubric()}\n\n---\n\n# EVIDENCE PACKET\n\n${packet}`;
-  const runsDir = mkdtempSync(join(tmpdir(), `bench-verify-${task.meta.id}-`));
+  const runsDir = mkdtempSync(join(tmpdir(), "bench-verify-"));
   try {
-    // --no-tools: the verifier reads the packet from the prompt and MUST reply
-    // inline. Without it, pi runs in the repo cwd with write tools live and a
-    // tool-eager model writes its verdict to a file (polluting the tree and
-    // scoring as unparseable -> silent uncertain). See journal 2026-07-10.
-    const orn = runOrn({ prompt, model, label: `verify-${task.meta.id}`, runsDir, noTools: true });
+    const orn = runOrn({ prompt, model, label, runsDir, noTools: true });
     return parseVerdict(orn.record?.finalText || "");
   } finally {
     rmSync(runsDir, { recursive: true, force: true });
@@ -179,14 +170,17 @@ function cmdRun(o) {
   const repeats = o.repeat ? [Number(o.repeat)] : Array.from({ length: Number(o.repeats || 1) }, (_, i) => i + 1);
   const model = typeof o.model === "string" ? o.model : undefined;
   const verifierModel = typeof o["verifier-model"] === "string" ? o["verifier-model"] : undefined;
+  const saveCorpus = typeof o["save-corpus"] === "string" ? o["save-corpus"] : undefined;
+  const resultsDir = typeof o["results-dir"] === "string" ? o["results-dir"] : RESULTS_DIR;
   const extra = typeof o.extra === "string" ? readFileSync(o.extra, "utf8") : "";
   if (round > 1 && !ARMS[arm].loop) die(`arm ${arm} is single-shot; --round ${round} is invalid`);
 
   const t = loadTask(task);
   keepAwake(); // long run: don't let the Mac idle-sleep and truncate orn calls
   const prompt = assemblePrompt(arm, t.parts, { round, extra });
-  mkdirSync(RESULTS_DIR, { recursive: true });
-  const resultsFile = join(RESULTS_DIR, `${task}__${arm}.jsonl`);
+  mkdirSync(resultsDir, { recursive: true });
+  if (saveCorpus) mkdirSync(saveCorpus, { recursive: true });
+  const resultsFile = join(resultsDir, `${task}__${arm}.jsonl`);
 
   for (const repeat of repeats) {
     const wd = makeWorkdir(t);
@@ -210,11 +204,21 @@ function cmdRun(o) {
         runId: orn.record?.runId || null,
         model: orn.record?.model || model || null,
       };
-      // Optional Layer-1 verifier pass: adjudicate the same run while the
-      // workdir still exists. The oracle's `pass` stays the gold label; the
-      // verifier's verdict is scored against it by `verify-report`.
-      if (verifierModel) {
-        const v = runVerifier({ task: t, wd, record: orn.record, model: verifierModel });
+      // Gather the mechanical evidence once if either consumer needs it.
+      const ev = verifierModel || saveCorpus ? gatherEvidence(t, wd) : null;
+      if (saveCorpus && ev) {
+        const rec = corpusRecordFrom({
+          task, arm, round, repeat, runId: orn.record?.runId || null,
+          goldPass: oracle.pass, goal: t.parts.goal, grounding: t.parts.grounding,
+          evidence: ev, record: orn.record,
+        });
+        writeFileSync(join(saveCorpus, `${task}__${arm}__r${round}__k${repeat}.json`), JSON.stringify(rec, null, 2));
+      }
+      if (verifierModel && ev) {
+        const v = adjudicate({
+          goal: t.parts.goal, grounding: t.parts.grounding, evidence: ev,
+          record: orn.record, model: verifierModel, label: `verify-${t.meta.id}`,
+        });
         row.verifierModel = verifierModel;
         row.verifierVerdict = v.verdict;
         row.verifierReason = v.reason;
@@ -225,7 +229,8 @@ function cmdRun(o) {
     }
     appendFileSync(resultsFile, JSON.stringify(row) + "\n");
     const vtag = row.verifierVerdict ? `, verifier ${row.verifierVerdict}` : "";
-    process.stdout.write(`${label}: ${row.pass ? "PASS" : "fail"} (exit ${row.exit}, tools ${row.toolSequence.length}, changed ${row.changed}${vtag})\n`);
+    const ctag = saveCorpus ? ", corpus✓" : "";
+    process.stdout.write(`${label}: ${row.pass ? "PASS" : "fail"} (exit ${row.exit}, tools ${row.toolSequence.length}, changed ${row.changed}${vtag}${ctag})\n`);
   }
 }
 
