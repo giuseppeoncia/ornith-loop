@@ -11,6 +11,7 @@ import { readFile } from "node:fs/promises";
 
 const mode = process.env.FAKE_PI_MODE || "success";
 const isVerifierCall = process.argv.some((a) => typeof a === "string" && a.includes("# EVIDENCE PACKET"));
+const isOrchestratorCall = process.argv.some((a) => typeof a === "string" && a.includes("# ORCHESTRATOR DECISION"));
 
 if (mode === "crash") {
   process.stderr.write("boom\n");
@@ -19,6 +20,18 @@ if (mode === "crash") {
   setInterval(() => {}, 1000); // never exits
 } else if (mode === "utf8") {
   process.stdout.write("ornith → café ✅ 日本語 🐦\n");
+  process.exit(0);
+} else if (isOrchestratorCall) {
+  const action = process.env.FAKE_PI_ACTION || "done";
+  const grounding = process.env.FAKE_PI_GROUNDING || "";
+  const text = JSON.stringify({ action, grounding, reason: "stubbed orchestrator decision" });
+  const msg = { role: "assistant", stopReason: "stop", content: [{ type: "text", text }] };
+  const lines = [
+    { type: "session", version: 3, id: "33333333-3333-3333-3333-333333333333", timestamp: "2026-07-07T16:50:00.000Z", cwd: "/tmp/orch" },
+    { type: "agent_start" },
+    { type: "agent_end", messages: [msg] },
+  ];
+  process.stdout.write(lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
   process.exit(0);
 } else if (isVerifierCall) {
   const verdict = process.env.FAKE_PI_VERDICT || "uncertain";

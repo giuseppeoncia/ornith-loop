@@ -23,13 +23,14 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
 import { buildEvidencePacket, parseVerdict, scoreVerifier, corpusRecordFrom } from "../src/verifier.js";
-import { scoreOrchestrator, orchestratorDeltas } from "../src/orchestrator.js";
+import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision } from "../src/orchestrator.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ORN = resolve(HERE, "..", "bin", "orn.js");
 const TASKS_DIR = join(HERE, "tasks");
 const RESULTS_DIR = join(HERE, "results");
 const RUBRIC_PATH = resolve(HERE, "..", "verifier", "rubric.md");
+const ORCH_RUBRIC_PATH = resolve(HERE, "..", "orchestrator", "rubric.md");
 
 function die(msg) {
   process.stderr.write(`bench: ${msg}\n`);
@@ -343,27 +344,89 @@ function cmdOrchestrateReport(o) {
   );
 }
 
-// The agentic execution driver is NOT implemented — driving a local model
-// through the full ornith-loop (recon → minimal-scaffold prompt → orn run →
-// verify → bounded corrective loop → journal) needs a real agent host, not the
-// mechanical layer this file provides. docs/ORCHESTRATOR.md is the spec; this is
-// the honest stub (parallels BENCHMARK.md's "orn bench — not built here"). Until
-// it exists, populate benchmarks/results/*.jsonl semi-manually with rows shaped:
-//   { task, repeat, orchestratorModel, orchestratorOutcome: "done"|"escalate",
-//     pass: <oracle gold label>, orchestratorRounds?, orchestratorReason? }
-// and read them with `orchestrate-report`. Baseline rows use orchestratorModel
-// "claude" (the reference the deltas compare against).
-function cmdOrchestrate() {
-  process.stderr.write(
-    "orchestrate: the local-orchestrator execution driver is not built yet.\n\n" +
-      "It would drive a candidate LOCAL model through the whole ornith-loop and record\n" +
-      "one row per (task, repeat): its terminal outcome (`done`|`escalate`) + the oracle\n" +
-      "gold label on the final workdir. See docs/ORCHESTRATOR.md §7 (protocol).\n\n" +
-      "For now, record rows semi-manually into benchmarks/results/*.jsonl (schema in the\n" +
-      "source comment above cmdOrchestrate) and score them with:\n" +
-      "  node benchmarks/bench.mjs orchestrate-report\n"
-  );
-  process.exit(2);
+// Drive a candidate LOCAL model as the orchestrator through the ornith-loop
+// (docs/ORCHESTRATOR.md; spec docs/superpowers/specs/2026-07-12-orchestrate-driver-m1-design.md).
+// M1: recon is FIXED (round-1 grounding = frozen grounding.md); the candidate owns
+// only the per-round decision (done/retry/escalate) + the corrective grounding fact.
+// Presidia: Layer-0 oracle scores post-hoc and is never shown to the candidate; the
+// Layer-1 verifier is a separate model. One row per (task, repeat).
+function cmdOrchestrate(o) {
+  const task = o.task || die("--task required");
+  const orchestratorModel = typeof o["orchestrator-model"] === "string" ? o["orchestrator-model"] : die("--orchestrator-model <id> required");
+  const verifierModel = typeof o["verifier-model"] === "string" ? o["verifier-model"] : "qwen3.5:4b";
+  const maxRounds = Number(o.rounds || 3);
+  const repeats = o.repeat ? [Number(o.repeat)] : Array.from({ length: Number(o.repeats || 1) }, (_, i) => i + 1);
+  const resultsDir = typeof o["results-dir"] === "string" ? o["results-dir"] : RESULTS_DIR;
+
+  const t = loadTask(task);
+  keepAwake();
+  mkdirSync(resultsDir, { recursive: true });
+  const slug = orchestratorModel.replace(/[^a-zA-Z0-9]+/g, "-");
+  const resultsFile = join(resultsDir, `${task}__orch-${slug}.jsonl`);
+  const rubric = readFileSync(ORCH_RUBRIC_PATH, "utf8");
+
+  for (const repeat of repeats) {
+    let grounding = (t.parts.grounding || "").trim(); // recon FIXED in M1
+    let outcome = "escalate";
+    let reason = "";
+    let roundsUsed = 0;
+    let finalWd = null;
+    let finalRunsDir = null;
+
+    for (let round = 1; round <= maxRounds; round++) {
+      roundsUsed = round;
+      // discard a prior round's workdir (rounds are fresh attempts, not continuations)
+      if (finalWd) rmSync(finalWd, { recursive: true, force: true });
+      if (finalRunsDir) rmSync(finalRunsDir, { recursive: true, force: true });
+      const wd = makeWorkdir(t);
+      const runsDir = mkdtempSync(join(tmpdir(), `bench-runs-${t.meta.id}-`));
+      finalWd = wd;
+      finalRunsDir = runsDir;
+
+      const prompt = `${(t.parts.goal || "").trim()}\n\n${grounding}`.trim();
+      const orn = runOrn({ prompt, workdir: wd, label: `${task}-orch-k${repeat}-r${round}`, runsDir });
+      const ev = gatherEvidence(t, wd);
+      const verdict = adjudicate({
+        goal: t.parts.goal, grounding, evidence: ev,
+        record: orn.record, model: verifierModel, label: `verify-${t.meta.id}`,
+      });
+
+      const decisionPrompt =
+        `${rubric}\n\n---\n\n# ORCHESTRATOR DECISION\n\n` +
+        `## GOAL\n${(t.parts.goal || "").trim()}\n\n` +
+        `## GROUNDING ALREADY SENT\n${grounding}\n\n` +
+        `## LAST ROUND EVIDENCE\n` +
+        `test exit: ${ev.testExitCode}\nchanged files: ${ev.changedFiles.join(", ") || "(none)"}\n\n` +
+        `test output:\n${ev.testOutput}\n\ndiff:\n${ev.diff}\n\n` +
+        `## LAYER-1 VERIFIER VERDICT\nverdict: ${verdict.verdict}\nreason: ${verdict.reason}\n\n` +
+        `Rounds used: ${round} of ${maxRounds}.`;
+      const decRunsDir = mkdtempSync(join(tmpdir(), "bench-orch-"));
+      let decision;
+      try {
+        const dec = runOrn({ prompt: decisionPrompt, model: orchestratorModel, label: `orch-${t.meta.id}-k${repeat}-r${round}`, runsDir: decRunsDir, noTools: true });
+        decision = parseRoundDecision(dec.record?.finalText || "");
+      } finally {
+        rmSync(decRunsDir, { recursive: true, force: true });
+      }
+      reason = decision.reason;
+
+      if (decision.action === "done") { outcome = "done"; break; }
+      if (decision.action === "retry" && round < maxRounds) { grounding = `${grounding}\n\n${decision.grounding}`.trim(); continue; }
+      outcome = "escalate"; break; // escalate, or retry with the round budget spent
+    }
+
+    // Layer-0 gold oracle on the FINAL workdir — the anchor, never shown to the candidate.
+    const oracle = runOracle(t, finalWd, "");
+    rmSync(finalWd, { recursive: true, force: true });
+    rmSync(finalRunsDir, { recursive: true, force: true });
+
+    const row = {
+      task, repeat, orchestratorModel, orchestratorOutcome: outcome,
+      pass: oracle.pass, orchestratorRounds: roundsUsed, orchestratorReason: reason, verifierModel,
+    };
+    appendFileSync(resultsFile, JSON.stringify(row) + "\n");
+    process.stdout.write(`${task}-orch-k${repeat}: ${outcome} (rounds ${roundsUsed}, oracle ${oracle.pass ? "PASS" : "fail"})\n`);
+  }
 }
 
 // Replay one candidate verifier over a frozen corpus (docs/VERIFIER.md §5). Runs
@@ -418,7 +481,7 @@ else {
       "       node benchmarks/bench.mjs verify-corpus --corpus <dir> --verifier-model <id> [--results-dir path]\n" +
       "       node benchmarks/bench.mjs report\n" +
       "       node benchmarks/bench.mjs verify-report\n" +
-      "       node benchmarks/bench.mjs orchestrate            (stub — see docs/ORCHESTRATOR.md)\n" +
+      "       node benchmarks/bench.mjs orchestrate --task <id> --orchestrator-model <id> [--verifier-model <id>] [--repeats N] [--rounds N] [--results-dir path]\n" +
       "       node benchmarks/bench.mjs orchestrate-report [--baseline <model>]\n"
   );
   process.exit(cmd ? 2 : 0);

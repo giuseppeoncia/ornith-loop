@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `bench.mjs orchestrate --task <id> --orchestrator-model <id>` — the agentic driver that puts
+  a candidate LOCAL model in the orchestrator seat (docs/ORCHESTRATOR.md). M1: recon is fixed
+  (round-1 grounding = frozen `grounding.md`); the candidate owns only the per-round decision
+  (`done`/`retry`/`escalate`, `src/orchestrator.js` `parseRoundDecision`) and the corrective
+  grounding fact on a retry. Layer-0 oracle scores post-hoc (never shown to the candidate); the
+  Layer-1 verifier (default `qwen3.5:4b`) stays a separate model. New `orchestrator/rubric.md`.
+  Rows feed the existing `orchestrate-report`. Dry-runnable via the `fake-pi` fixture.
 - Consolidated **roadmap + session handoff** (`docs/ROADMAP.md`) and an "Selecting a local
   orchestrator" runbook section in `benchmarks/README.md`: a single "start here" for resuming
   on the local ollama workstation (Mac), with the branch/prereq/sanity-check resume steps, a
