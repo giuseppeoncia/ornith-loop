@@ -301,15 +301,54 @@ function cmdVerifyReport() {
   );
 }
 
+// Replay one candidate verifier over a frozen corpus (docs/VERIFIER.md §5). Runs
+// ornith ZERO times: each record's ground-truth evidence is rebuilt into a packet
+// and adjudicated read-only. Rows are tagged source:"corpus" so verify-report
+// includes them but `report` (executor aggregate) skips them.
+function cmdVerifyCorpus(o) {
+  const corpus = typeof o.corpus === "string" ? o.corpus : die("--corpus <dir> required");
+  const model = typeof o["verifier-model"] === "string" ? o["verifier-model"] : die("--verifier-model <id> required");
+  const resultsDir = typeof o["results-dir"] === "string" ? o["results-dir"] : RESULTS_DIR;
+  if (!existsSync(corpus)) die(`corpus dir not found: ${corpus}`);
+  const files = readdirSync(corpus).filter((f) => f.endsWith(".json")).sort();
+  if (!files.length) die(`no corpus records (*.json) in ${corpus}`);
+  keepAwake();
+  mkdirSync(resultsDir, { recursive: true });
+
+  for (const f of files) {
+    let rec;
+    try {
+      rec = JSON.parse(readFileSync(join(corpus, f), "utf8"));
+    } catch {
+      process.stderr.write(`bench: skipping malformed corpus record ${f}\n`);
+      continue;
+    }
+    const v = adjudicate({
+      goal: rec.goal, grounding: rec.grounding,
+      evidence: { testCmd: rec.testCmd, testOutput: rec.testOutput, testExitCode: rec.testExitCode, changedFiles: rec.changedFiles, diff: rec.diff },
+      record: rec.record, model, label: `verify-${rec.task}`,
+    });
+    const row = {
+      task: rec.task, arm: rec.arm, repeat: rec.repeat, round: rec.round,
+      pass: rec.goldPass, verifierModel: model, verifierVerdict: v.verdict, verifierReason: v.reason,
+      source: "corpus",
+    };
+    appendFileSync(join(resultsDir, `${rec.task}__${rec.arm}.jsonl`), JSON.stringify(row) + "\n");
+    process.stdout.write(`${rec.task}-${rec.arm}-r${rec.round}-k${rec.repeat}: gold ${rec.goldPass ? "PASS" : "fail"}, verifier ${v.verdict}\n`);
+  }
+}
+
 const argv = process.argv.slice(2);
 const cmd = argv[0];
 const opts = parseFlags(argv.slice(1));
 if (cmd === "run") cmdRun(opts);
 else if (cmd === "report") cmdReport();
 else if (cmd === "verify-report") cmdVerifyReport();
+else if (cmd === "verify-corpus") cmdVerifyCorpus(opts);
 else {
   process.stdout.write(
-    "usage: node benchmarks/bench.mjs run --task <id> --arm <A|B1|B2|B3> [--repeats N] [--model id] [--verifier-model id] [--round N --extra file --repeat K]\n" +
+    "usage: node benchmarks/bench.mjs run --task <id> --arm <A|B1|B2|B3> [--repeats N] [--model id] [--verifier-model id] [--save-corpus dir] [--results-dir path] [--round N --extra file --repeat K]\n" +
+      "       node benchmarks/bench.mjs verify-corpus --corpus <dir> --verifier-model <id> [--results-dir path]\n" +
       "       node benchmarks/bench.mjs report\n" +
       "       node benchmarks/bench.mjs verify-report\n"
   );
