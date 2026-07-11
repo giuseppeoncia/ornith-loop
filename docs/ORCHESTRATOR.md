@@ -193,7 +193,38 @@ and the 4 B verifier:
 > shortlist's advertised sizes wrong (`qwen3-coder-next` was 48 GB, not ~16 GB; a claimed
 > `qwen3-coder-14b` tag does not exist). Do the same check here.
 
-## 9 · Success criteria for this experiment
+## 9 · Mapping onto the existing tooling (the skeleton)
+
+The scoring layer exists; the agentic execution driver does not — the same split
+`BENCHMARK.md` drew for `orn bench` ("this doc is the spec it would implement").
+
+**Built (pure, unit-tested — `src/orchestrator.js`, mirrors `src/verifier.js`):**
+- `parseOrchestratorOutcome(text)` — parses the orchestrator's terminal declaration into
+  `{ outcome, roundsUsed, reason }`. Golden rule, as with the verifier: anything not clearly
+  `done` defaults to **`escalate`** — a confabulated or unparseable "I'm finished" routes to
+  Claude, never ships silently.
+- `scoreOrchestrator(rows)` — per-model rollup with the safety metric
+  **`effectiveFalseSuccess` = P(oracle fail | outcome `done`)**, plus `autonomousPassRate`
+  and `escalationRate`; sorted safest-first (§3).
+- `orchestratorDeltas(rows, {baselineModel})` — per-task **pass@N delta vs the Claude
+  baseline** (§3, primary metric).
+- `benchmarks/bench.mjs orchestrate-report [--baseline <model>]` — prints both tables over
+  `benchmarks/results/*.jsonl`, exactly as `verify-report` does for the verifier.
+
+**Row schema** (append to `benchmarks/results/*.jsonl`, as the verifier pilot did
+semi-manually): `{ task, repeat, orchestratorModel, orchestratorOutcome: "done"|"escalate",
+pass: <oracle gold label>, orchestratorRounds?, orchestratorReason? }`. Baseline rows use
+`orchestratorModel: "claude"`.
+
+**Not built (needs a real agent host, not this mechanical layer):** the driver that puts a
+candidate LOCAL model in the orchestrator seat and runs it through the whole ornith-loop
+(recon → minimal-scaffold prompt → `orn run` → verify → bounded corrective loop → journal),
+emitting one row per (task, repeat). `bench.mjs orchestrate` is the honest stub that documents
+this and points here. Until it lands, a Phase-1 pilot can be driven semi-manually (Claude in
+the seat for the baseline; the candidate for its rows) and scored with `orchestrate-report` —
+the same phasing `BENCHMARK.md` used.
+
+## 10 · Success criteria for this experiment
 
 - Produces, per candidate, the **`pass@N` delta vs Claude** and the **`false-success` rate**
   over the benchmark suite, including the hard in-place / additive tasks that exercise the

@@ -23,6 +23,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
 import { buildEvidencePacket, parseVerdict, scoreVerifier } from "../src/verifier.js";
+import { scoreOrchestrator, orchestratorDeltas } from "../src/orchestrator.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ORN = resolve(HERE, "..", "bin", "orn.js");
@@ -296,17 +297,85 @@ function cmdVerifyReport() {
   );
 }
 
+// Score a candidate LOCAL orchestrator against the oracle + the Claude baseline
+// (docs/ORCHESTRATOR.md). Rows carry `orchestratorModel` / `orchestratorOutcome`
+// (`done`|`escalate`) alongside the oracle `pass`. The safety metric is effFS
+// (effectiveFalseSuccess) = P(oracle fail | outcome done): how often a loop the
+// orchestrator declared finished was actually broken — want ≈0. The capability
+// metric is the per-task pass@N delta vs the Claude baseline rows.
+//
+// Rows are recorded the same way as verifier rows — appended to
+// benchmarks/results/*.jsonl — so a semi-manual pilot (Phase 1, like the
+// verifier campaign) can populate them without the execution driver below.
+function cmdOrchestrateReport(o) {
+  const rows = loadRows().filter((r) => r.orchestratorOutcome);
+  if (!rows.length) return process.stdout.write("no orchestrator results yet (see `orchestrate` and docs/ORCHESTRATOR.md)\n");
+  const baselineModel = typeof o.baseline === "string" ? o.baseline : "claude";
+  const scored = scoreOrchestrator(rows);
+
+  process.stdout.write("\nOrchestrator vs oracle (sorted safest-first)\n");
+  process.stdout.write("model                          n  autoPass  falseSucc  effFS  escalate\n");
+  for (const s of scored) {
+    process.stdout.write(
+      `${String(s.model).padEnd(28)} ${String(s.n).padStart(3)}  ${pct(s.autonomousPassRate)}    ${pct(s.falseSuccessRate)}   ${pct(s.effectiveFalseSuccess)}   ${pct(s.escalationRate)}\n`
+    );
+  }
+
+  const dl = orchestratorDeltas(rows, { baselineModel });
+  if (dl.length) {
+    process.stdout.write(`\nPer-task pass@N delta vs baseline '${baselineModel}' (positive = candidate matches/beats Claude)\n`);
+    process.stdout.write("task            model                    passN  baseN   delta\n");
+    for (const d of dl) {
+      process.stdout.write(
+        `${d.task.padEnd(15)} ${String(d.model).padEnd(24)} ${pct(d.autonomousPassN)}  ${pct(d.baselinePassN)}  ${signed(d.delta)}\n`
+      );
+    }
+  }
+  process.stdout.write(
+    "\neffFS = false-success among 'done' calls (the safety metric; want ≈0)\n" +
+      "autoPass = loops the orchestrator finished itself and the oracle confirmed\n" +
+      "escalate = share routed to the Claude audit tier\n"
+  );
+}
+
+// The agentic execution driver is NOT implemented — driving a local model
+// through the full ornith-loop (recon → minimal-scaffold prompt → orn run →
+// verify → bounded corrective loop → journal) needs a real agent host, not the
+// mechanical layer this file provides. docs/ORCHESTRATOR.md is the spec; this is
+// the honest stub (parallels BENCHMARK.md's "orn bench — not built here"). Until
+// it exists, populate benchmarks/results/*.jsonl semi-manually with rows shaped:
+//   { task, repeat, orchestratorModel, orchestratorOutcome: "done"|"escalate",
+//     pass: <oracle gold label>, orchestratorRounds?, orchestratorReason? }
+// and read them with `orchestrate-report`. Baseline rows use orchestratorModel
+// "claude" (the reference the deltas compare against).
+function cmdOrchestrate() {
+  process.stderr.write(
+    "orchestrate: the local-orchestrator execution driver is not built yet.\n\n" +
+      "It would drive a candidate LOCAL model through the whole ornith-loop and record\n" +
+      "one row per (task, repeat): its terminal outcome (`done`|`escalate`) + the oracle\n" +
+      "gold label on the final workdir. See docs/ORCHESTRATOR.md §7 (protocol).\n\n" +
+      "For now, record rows semi-manually into benchmarks/results/*.jsonl (schema in the\n" +
+      "source comment above cmdOrchestrate) and score them with:\n" +
+      "  node benchmarks/bench.mjs orchestrate-report\n"
+  );
+  process.exit(2);
+}
+
 const argv = process.argv.slice(2);
 const cmd = argv[0];
 const opts = parseFlags(argv.slice(1));
 if (cmd === "run") cmdRun(opts);
 else if (cmd === "report") cmdReport();
 else if (cmd === "verify-report") cmdVerifyReport();
+else if (cmd === "orchestrate") cmdOrchestrate(opts);
+else if (cmd === "orchestrate-report") cmdOrchestrateReport(opts);
 else {
   process.stdout.write(
     "usage: node benchmarks/bench.mjs run --task <id> --arm <A|B1|B2|B3> [--repeats N] [--model id] [--verifier-model id] [--round N --extra file --repeat K]\n" +
       "       node benchmarks/bench.mjs report\n" +
-      "       node benchmarks/bench.mjs verify-report\n"
+      "       node benchmarks/bench.mjs verify-report\n" +
+      "       node benchmarks/bench.mjs orchestrate            (stub — see docs/ORCHESTRATOR.md)\n" +
+      "       node benchmarks/bench.mjs orchestrate-report [--baseline <model>]\n"
   );
   process.exit(cmd ? 2 : 0);
 }

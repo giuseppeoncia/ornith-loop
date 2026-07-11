@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Orchestrator-selection **scoring skeleton** (`src/orchestrator.js`, unit-tested in
+  `test/orchestrator.test.js`; `bench.mjs orchestrate-report`): pure helpers mirroring
+  `src/verifier.js` — `parseOrchestratorOutcome` (a `done`/`escalate` reply; unparseable
+  defaults to `escalate`, never `done`), `scoreOrchestrator` (per-model
+  **`effectiveFalseSuccess` = P(oracle fail | outcome `done`)**, the safety metric, plus
+  autonomous-pass and escalation rates, sorted safest-first), and `orchestratorDeltas`
+  (per-task pass@N delta vs the Claude baseline). `bench.mjs orchestrate-report
+  [--baseline <model>]` prints both tables over `benchmarks/results/*.jsonl`; `bench.mjs
+  orchestrate` is an honest stub for the not-yet-built agentic execution driver (a Phase-1
+  pilot can populate rows semi-manually, as the verifier campaign did). See
+  `docs/ORCHESTRATOR.md` §9.
 - Orchestrator-selection design (`docs/ORCHESTRATOR.md`): can the **orchestrator** role (the
   host that runs the `ornith-loop` skill — today Claude) also go **local-first**, like the
   verifier? Companion to `VERIFIER.md`, same falsifiable shape — decomposes the skill's six
