@@ -154,6 +154,27 @@ ORN_PI_BIN="$PWD/test/fixtures/fake-pi.js" FAKE_PI_VERDICT=pass \
 node benchmarks/bench.mjs verify-report
 ```
 
+### Fair cross-candidate comparison (decoupled corpus)
+
+To score several candidates on the *same* ornith runs (and run ornith only once), freeze a
+corpus in phase 1, then replay each candidate in phase 2:
+
+```bash
+rm -rf benchmarks/results benchmarks/corpus
+# Phase 1 — build the corpus once (auto-caffeinated on macOS)
+node benchmarks/bench.mjs run --task T6-inplace-hard --arm A --repeats 20 --save-corpus benchmarks/corpus/main
+node benchmarks/bench.mjs run --task T3-inplace      --arm A --repeats 20 --save-corpus benchmarks/corpus/main
+# Phase 2 — replay each candidate over the SAME corpus (no ornith re-run)
+for m in qwen3.5:4b qwen3-coder:30b gemma3:4b phi4 llama3.1:8b; do
+  node benchmarks/bench.mjs verify-corpus --corpus benchmarks/corpus/main --verifier-model "$m"
+done
+node benchmarks/bench.mjs verify-report
+```
+
+`--save-corpus` and the coupled `--verifier-model` are independent; the corpus is
+gitignored/ephemeral (conclusions go in the journal). `verify-corpus` rows are tagged
+`source:"corpus"`: `verify-report` includes them, `report` ignores them.
+
 ## Selecting a local orchestrator (the loop driver)
 
 The next role after the verifier: can a lightweight **local** model drive the whole loop

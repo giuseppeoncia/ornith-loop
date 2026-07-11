@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { VERDICTS, buildEvidencePacket, parseVerdict, scoreVerifier } from "../src/verifier.js";
+import { VERDICTS, buildEvidencePacket, parseVerdict, scoreVerifier, corpusRecordFrom } from "../src/verifier.js";
 
 test("buildEvidencePacket: includes ground truth, excludes the answer-key and ornith prose", () => {
   const packet = buildEvidencePacket({
@@ -108,4 +108,49 @@ test("scoreVerifier: a model that never false-passes sorts first", () => {
 test("scoreVerifier: rows with no verdict are ignored", () => {
   const scored = scoreVerifier([{ verifierModel: "M", verifierVerdict: null, pass: true }]);
   assert.equal(scored.length, 0);
+});
+
+test("corpusRecordFrom: freezes ground-truth evidence + gold label, drops ornith prose", () => {
+  const rec = corpusRecordFrom({
+    task: "T3-inplace", arm: "A", round: 1, repeat: 2, runId: "rid-1",
+    goldPass: false, goal: "spanish greet", grounding: "edit src/greet.mjs",
+    evidence: { testCmd: ["node", "--test"], testOutput: "# fail 1", testExitCode: 1, changedFiles: ["src/greet.mjs"], diff: "- Hello\n+ Hola" },
+    record: { model: "ornith-1.0-9b-64k", exit: { reason: "completed" }, toolCallCount: 4, toolSequence: [{ name: "Edit" }], workdirChange: { changed: true }, finalText: "All done ✅", flags: { claimedDone: true } },
+  });
+  assert.equal(rec.goldPass, false);
+  assert.equal(rec.diff, "- Hello\n+ Hola");
+  assert.deepEqual(rec.changedFiles, ["src/greet.mjs"]);
+  assert.equal(rec.record.model, "ornith-1.0-9b-64k");
+  assert.equal(rec.record.workdirChange.changed, true);
+  assert.ok(!("finalText" in rec.record), "slim record must not carry ornith prose");
+  assert.equal(JSON.stringify(rec).includes("All done"), false, "no finalText anywhere in the record");
+});
+
+test("corpusRecordFrom round-trips through buildEvidencePacket (same ground truth, no prose)", () => {
+  const rec = corpusRecordFrom({
+    task: "T3-inplace", arm: "A", repeat: 1, goldPass: true, goal: "spanish greet", grounding: "edit src/greet.mjs",
+    evidence: { testCmd: ["node", "--test"], testOutput: "# pass 2", testExitCode: 0, changedFiles: ["src/greet.mjs"], diff: "+ Hola" },
+    record: { model: "ornith", exit: { reason: "completed" }, toolCallCount: 3, toolSequence: [{ name: "Edit" }], workdirChange: { changed: true }, finalText: "SHIP IT", flags: {} },
+  });
+  const packet = buildEvidencePacket({
+    goal: rec.goal, grounding: rec.grounding, testCmd: rec.testCmd, testOutput: rec.testOutput,
+    testExitCode: rec.testExitCode, changedFiles: rec.changedFiles, diff: rec.diff, record: rec.record,
+  });
+  assert.match(packet, /spanish greet/);
+  assert.match(packet, /exit code: 0/);
+  assert.doesNotMatch(packet, /SHIP IT/);
+});
+
+test("corpusRecordFrom: slims toolSequence to name/isError, dropping model-authored args", () => {
+  const rec = corpusRecordFrom({
+    task: "T", arm: "A", repeat: 1, goldPass: true,
+    evidence: { testCmd: ["node", "--test"], testOutput: "ok", testExitCode: 0, changedFiles: [], diff: "" },
+    record: {
+      model: "ornith", exit: { reason: "completed" }, toolCallCount: 1,
+      toolSequence: [{ name: "Write", args: { path: "x.js", content: "SECRET FILE BODY" }, isError: false }],
+      workdirChange: { changed: true }, flags: {},
+    },
+  });
+  assert.deepEqual(rec.record.toolSequence, [{ name: "Write", isError: false }]);
+  assert.equal(JSON.stringify(rec).includes("SECRET FILE BODY"), false, "model-authored args must not reach the corpus");
 });

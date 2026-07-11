@@ -72,6 +72,9 @@ them, sorted safest-first.
    GPU that can't hold both, each `--verifier-model` call swaps weights (executor out, verifier
    in) and back — accepted (cost/speed are non-goals). Alternatives if it bites: size both to
    co-reside, or batch all executions then all verifications.
+   This decoupled flow is implemented: `run --save-corpus <dir>` freezes each run's evidence +
+   gold label, and `verify-corpus --corpus <dir> --verifier-model <id>` replays any candidate
+   over that identical corpus (ornith runs once). See `benchmarks/README.md`.
 6. **The verifier runs read-only.** It is invoked with `orn run --no-tools`, so pi disables all
    tools and the model's only way to answer is an inline reply. This is load-bearing: without
    it pi runs in the driver's cwd (the repo) with write tools live, and a tool-eager verifier

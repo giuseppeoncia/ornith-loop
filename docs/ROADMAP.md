@@ -78,9 +78,10 @@ suite). Spec: `ORCHESTRATOR.md §7` (protocol) and §9 (the row schema it must e
 Already annotated in `journal/2026-07-10-verifier-selection.md` ("Recommended next steps" /
 "Still open"); consolidated here so they aren't lost:
 
-- **Decouple executions:** run the executor once per (task, repeat) and fan that one evidence
-  packet to every candidate verifier, so all are scored on the SAME runs (removes the
-  per-candidate unfairness that made the 30b comparison unfair).
+- ~~**Decouple executions:**~~ **done** (merged from `develop`) — `run --save-corpus <dir>`
+  freezes each run's evidence + gold label, and `verify-corpus --corpus <dir> --verifier-model
+  <id>` replays any candidate over that identical frozen corpus (ornith executed once). Rows
+  tag `source:"corpus"`. See `benchmarks/README.md` → "Fair cross-candidate comparison".
 - **Cross-family lightweight sweep:** score gemma3 / phi4 / llama3.1 (validated to co-reside
   with the executor) as first-pass verifiers, suite + rubric unchanged.
 - **Fix `docs/VERIFIER.md` shortlist sizes:** drop the wrong ~16 GB claim for
