@@ -7,6 +7,7 @@ Claude as the external reviewer.
 
 > **Status: the `orn` CLI and the `ornith-loop` skill are implemented; see below.**
 > The design is in [`docs/DESIGN.md`](docs/DESIGN.md).
+> Next steps & how to resume on a local workstation → [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Why pi + ornith
 

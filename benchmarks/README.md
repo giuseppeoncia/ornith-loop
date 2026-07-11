@@ -153,3 +153,50 @@ ORN_PI_BIN="$PWD/test/fixtures/fake-pi.js" FAKE_PI_VERDICT=pass \
   node benchmarks/bench.mjs run --task T1-scratch --arm B1 --repeats 1 --verifier-model fake
 node benchmarks/bench.mjs verify-report
 ```
+
+## Selecting a local orchestrator (the loop driver)
+
+The next role after the verifier: can a lightweight **local** model drive the whole loop
+(recon → minimal-scaffold prompt → `orn run` → verify → bounded corrective loop → journal),
+with the Layer-0 oracle kept as the anchor and Claude kept as the escalation tier? The
+experiment is specified in [`../docs/ORCHESTRATOR.md`](../docs/ORCHESTRATOR.md); the roadmap
+and how-to-resume are in [`../docs/ROADMAP.md`](../docs/ROADMAP.md).
+
+**What's built** (pure, unit-tested — `src/orchestrator.js`): `scoreOrchestrator`,
+`orchestratorDeltas`, and `bench.mjs orchestrate-report`. **What's not:** the agentic
+execution driver — `bench.mjs orchestrate` is an honest stub. So a Phase-1 pilot is
+**semi-manual** (Claude in the seat for the baseline), exactly as the benchmark/verifier
+campaigns started.
+
+Record one row per (task, repeat) by appending to `results/*.jsonl`:
+
+```jsonc
+{ "task": "T6-inplace-hard", "repeat": 1, "orchestratorModel": "claude",
+  "orchestratorOutcome": "done",        // "done" | "escalate"
+  "pass": true,                          // the oracle GOLD label on the final workdir
+  "orchestratorRounds": 2, "orchestratorReason": "tests green, diff in scope" }
+```
+
+Baseline rows use `orchestratorModel: "claude"` — the reference the per-task deltas compare
+against. `orchestratorOutcome` is the model's terminal declaration; `pass` is always the
+mechanical oracle, never the model's self-report. Then:
+
+```bash
+node benchmarks/bench.mjs orchestrate-report            # --baseline <model> defaults to "claude"
+```
+
+`orchestrate-report` prints, per model, `autoPass` / `falseSucc` / **`effFS`** / `escalate`,
+sorted safest-first, then the per-task **pass@N delta vs the Claude baseline**. `effFS`
+(false-success among `done` calls = P(oracle fail | outcome done)) is the selection metric —
+the orchestrator's analog of the verifier's `effFP`: an orchestrator that declares a broken
+run finished is worse than none, since ornith already confabulates. Pick the lightest model
+with `effFS ≈ 0` that matches Claude's pass@N.
+
+Suggested pilot: `T6-inplace-hard` + `T4-additive-hard` (the hard tasks where round-1
+failures fire, so the corrective loop — the orchestrator's hardest step — is actually
+exercised). The same runbook cautions apply: don't let the Mac idle-sleep during a sweep, and
+`results/` is gitignored → distil the numbers into `journal/YYYY-MM-DD-orchestrator-*.md`.
+
+Dry-run the report plumbing without ollama by hand-writing a couple of rows into
+`results/<task>__orch-smoke.jsonl` (schema above) and running `orchestrate-report`; delete
+the file afterwards.

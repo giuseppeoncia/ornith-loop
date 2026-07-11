@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Consolidated **roadmap + session handoff** (`docs/ROADMAP.md`) and an "Selecting a local
+  orchestrator" runbook section in `benchmarks/README.md`: a single "start here" for resuming
+  on the local ollama workstation (Mac), with the branch/prereq/sanity-check resume steps, a
+  paste-ready kickoff prompt, and the three tracks that were previously scattered across
+  journal entries and doc sections pulled into one prioritized list — (1) the semi-manual
+  orchestrator pilot, (2) building the agentic `orchestrate` execution driver, (3) the open
+  verifier follow-ups (decouple executions, cross-family sweep, shortlist-size fix). The
+  runbook documents the `results/*.jsonl` row schema and the `effFS` selection metric. Root
+  `README.md` gains a one-line pointer.
 - Orchestrator-selection **scoring skeleton** (`src/orchestrator.js`, unit-tested in
   `test/orchestrator.test.js`; `bench.mjs orchestrate-report`): pure helpers mirroring
   `src/verifier.js` — `parseOrchestratorOutcome` (a `done`/`escalate` reply; unparseable
