@@ -1,0 +1,208 @@
+# ornith-loop — Local orchestrator selection
+
+_Status: design (no orchestrator-selection runner implemented yet). Selection would run on a
+local ollama workstation, not in a remote container._
+
+Companion to [`DESIGN.md`](DESIGN.md) (the three roles), [`BENCHMARK.md`](BENCHMARK.md) (the
+method experiment and its oracle-scored suite), and [`VERIFIER.md`](VERIFIER.md) (which this
+doc deliberately parallels). It answers one question with evidence:
+
+> Can the **orchestrator** — the host that runs the `ornith-loop` skill, today Claude — also
+> be a **lightweight local model that does only that job**, keeping Claude as an escalation
+> tier? And what must such a model have?
+
+The repo has been peeling roles off Claude one at a time, each move anchored to the
+mechanical oracle and settled by a falsifiable campaign, not by assertion:
+
+- **Layer 0 verification** was always local (the mechanical oracle — `BENCHMARK.md`).
+- **Layer 1 verification** is now delegated to a lightweight local model (`qwen3.5:4b`,
+  effFP = 0 % confirmed at K=20 — `journal/2026-07-10-verifier-selection.md`), with Claude
+  kept only as the audit tier for `fail` / `uncertain`.
+
+The orchestrator is the logical next peel. The short answer is **feasible as _local-first
+with escalation_, not as a wholesale swap** — for the same reason the verifier is: a fully
+local loop must not become three confabulators in a row (§4).
+
+## 1 · The role being filled
+
+The orchestrator is what the [`ornith-loop` skill](../skill/ornith-loop/SKILL.md) encodes —
+six steps. It is a **loop controller** with a few genuinely-cognitive cores wrapped in
+mechanical glue. Decomposed by delegability:
+
+| Sub-task (skill step) | Nature | Delegability status |
+|---|---|---|
+| **1 · Grounding recon** — real paths, versions, test command, routes, selectors | agentic codebase comprehension | **hard core** — un-mechanized |
+| **2 · Minimal-scaffold prompt authoring** — goal + grounding, then _stop_ | discipline / restraint | **already mechanical** in the benchmark — the arm prompt is assembled from `goal.md` + `grounding.md` (`src/bench.js`), no model needed |
+| **3 · `orn run`** | mechanical | already CLI-only |
+| **4 · Verification** — Layer 0 oracle + Layer 1 reviewer | deterministic + judgement | **already delegated** — Layer 0 local; Layer 1 → `qwen3.5:4b` |
+| **5 · Corrective-grounding synthesis** — diagnose the failure, add the missing _fact_ (never a step), bounded to N | diagnosis + fact synthesis | **hard core** — highest escalation candidate |
+| **6 · Journal** — write the entry from ground-truth signals | templated write over ground truth | low risk |
+
+So the loop's mechanical parts (3), record-keeping (6), and verification (4) are already
+delegated or trivially delegable, and on the *benchmarked* path even the prompt (2) is pure
+templating. **Only two sub-tasks are genuinely model-hard and un-mechanized: grounding recon
+(1) and corrective-grounding synthesis (5).** They are the whole question.
+
+Both share the discipline the project is named for: the orchestrator must supply *grounding*,
+never *scaffold*. Its hardest job is not producing text — it is **restraint** (step 2) and
+**correct diagnosis without spoon-feeding** (step 5). That reframes what "capable enough"
+means (§5).
+
+## 2 · The falsifiable question
+
+**O1 — "a local model can drive the loop":** there exists a lightweight local model that, as
+the orchestrator, matches **Claude-orchestrated `pass@N`** on the frozen benchmark suite, at
+an escalation rate low enough to be worth it. If no candidate reaches Claude's `pass@N`
+without escalating almost every non-trivial decision, the honest conclusion is *"keep Claude
+as the orchestrator"* — a valid, publishable outcome, exactly as `VERIFIER.md` V1 lets
+"keep Claude primary" be a clean result.
+
+Directional and falsifiable. Rejecting O1 does **not** contradict the project's thesis (the
+thesis is about the *executor's* self-scaffolding, not about who orchestrates); it only bounds
+how far the human-in-the-loop can be automated away.
+
+## 3 · The metric that can sink the design
+
+The verifier campaign was cheap to run because Layer 0 handed it **gold labels for free** —
+every run has a mechanical pass/fail. The orchestrator has **no per-decision oracle**: "is
+this the right grounding?" and "is this prompt minimal-enough?" have no mechanical pass/fail.
+This is the structural difference from `VERIFIER.md`, and it is why the orchestrator is the
+harder role to validate.
+
+The way through: **the benchmark suite is itself an end-to-end oracle.** You do not need to
+score individual decisions — you score the *loop's outcome*.
+
+- **Primary metric — `pass@N` delta vs the Claude baseline**, per task, over K repeats. A
+  candidate orchestrator drives arm A (grounding + minimal scaffold + corrective loop) end to
+  end; the task oracle (`benchmarks/tasks/*/oracle.mjs`) scores each attempt. Compare to
+  Claude driving the identical arm. `≈ 0` delta = the local orchestrator lost nothing.
+- **The metric that can sink it — `false-success` / `false-stop`**, the orchestrator's analog
+  of the verifier's `effectiveFalsePass`. Of the runs the local orchestrator **declares done
+  / stops the loop on**, how many does the oracle say **fail**? This is the asymmetric error:
+  shipping a broken run as finished. Since ornith already confabulates success, an
+  orchestrator that also rubber-stamps a broken result is worse than none. It must be `≈ 0`.
+- **Cheap error — over-escalation.** Escalating a decision it could have made only costs a
+  Claude audit; a wrong "stop, this passed" costs a shipped failure. So, as with the verifier,
+  pick the **lightest** model with `false-success ≈ 0`, then break ties by the **lowest
+  escalation rate**.
+
+The scoring path stays mechanical and arm-agnostic: the oracle reads workdir + `runs/<id>.json`,
+never any agent's prose — the same anti-confabulation discipline as `BENCHMARK.md`.
+
+## 4 · The load-bearing constraint — do not create three confabulators
+
+`DESIGN.md` warns that a lone local reviewer plus a confabulating executor is **"two
+confabulators in a row [that] erase the only independent check."** Replacing the orchestrator
+compounds this: executor + verifier + orchestrator all small-local would remove every
+competent independent check from the common path.
+
+So a local orchestrator is only admissible with **two presidia kept immovable**:
+
+1. **Layer 0 — the mechanical oracle — stays the anchor of truth.** A red test or an
+   out-of-scope diff overrides any model, orchestrator included. (On real tasks with no
+   oracle, the *mechanical* part — running tests, computing the diff — is still done by the
+   host, not a model.)
+2. **Claude stays the escalation tier.** On doubt — a failure it cannot diagnose, a decision
+   below its confidence bar — the local orchestrator **escalates rather than guesses**, the
+   verifier's `uncertain` safety-valve lifted up to orchestration.
+
+The design is therefore **local-first with escalation**, identical in shape to the two-tier
+verifier — not a bare swap. A full-local *common path* with a Claude *audit tier* preserves
+the one independent check the project refuses to lose.
+
+## 5 · Characteristics the orchestrator model needs
+
+Ordered by importance. The verifier campaign's headline — *"size is not the lever,
+calibration is"* — applies with even more force here, because the orchestrator's failure mode
+is **over-helping**, not under-capability.
+
+1. **Calibration / restraint over helpfulness (the decisive trait).** Most instruct models
+   are RLHF-tuned toward maximal helpfulness, which *is* step-by-step scaffold — i.e. stealing
+   the nest. The orchestrator must hold a tight "goal + facts, **zero steps**" line and must
+   **escalate on doubt** instead of spoon-feeding. A well-calibrated small model beats a
+   capable but eager large one here.
+2. **Reliable, parsable function-calling.** Grounding recon is agentic (Read / Grep / Bash).
+   Avoid the two documented failure modes: `ornith-1.0-9b` emits tool calls only
+   intermittently, and `qwen3-coder:30b` *wrote its answer to a file* instead of replying
+   (`journal/2026-07-10-verifier-selection.md`). Want a disciplined **tools-capable instruct**
+   model, **not** a tool-happy coder model.
+3. **Codebase comprehension — reduced to selection.** Recon is the sub-task most sensitive to
+   model size. The move that made a 4 B verifier viable was **pre-computing the mechanics** so
+   the model only *selects/adjudicates*. Apply it here: deterministic extractors gather most
+   grounding (parse `package.json`, detect the test command, `git grep` paths/routes/selectors),
+   and the model's job shrinks to *selecting and assembling* the relevant facts — narrow job
+   → small model plausibly suffices.
+4. **Failure diagnosis for corrective grounding.** The hardest reasoning in the loop:
+   read run-signals + diff + oracle verdict and synthesize the *missing fact* (not just judge
+   pass/fail, as the verifier does). This is the **#1 escalation candidate** — do not force a
+   small model to own it; let it escalate to Claude when the diagnosis is not obvious.
+5. **Determinism (low temperature).** It is a controller, not a creative writer —
+   reproducibility matters more than variety.
+6. **Hardware co-residence.** On the 48 GB reference machine, executor (`ornith-9b`, ~9.5 GB)
+   + verifier (`qwen3.5:4b`, ~3.4 GB) + orchestrator must fit. A ~4–14 B orchestrator
+   co-resides with both (no weight-swap); a large one forces per-call swaps that dominate
+   wall-clock, as the 37 GB verifier ceiling did. Another pressure toward *smallest that is
+   calibrated enough*.
+
+## 6 · Delegation order (safest → hardest)
+
+Peel the role incrementally, oracle-anchored, exactly as the verifier was adopted:
+
+1. **Journal (6), `orn` invocation (3), prompt assembly (2), Layer-1 verify (4)** — ≈ 0 risk
+   or already delegated. Do these first / they are effectively done.
+2. **Grounding recon (1)** — delegate *via pre-compute*: deterministic extractors do the
+   gathering, the model only selects.
+3. **Corrective-grounding synthesis (5)** — last, and keep the Claude escalation path live.
+   This is where local-first most needs its audit tier.
+
+## 7 · Protocol — the "orchestrator-selection" campaign
+
+Mirrors `VERIFIER.md` §Protocol:
+
+1. **Gold labels come free** from the benchmark oracles, as always.
+2. **Run the frozen suite with the candidate as orchestrator**, driving arm A end to end
+   (recon → minimal-scaffold prompt → `orn run` → verify → bounded corrective loop). Compare
+   `pass@N` per task to the **Claude-orchestrated** baseline; record `false-success` /
+   `false-stop` and the escalation rate.
+3. **Span the failure modes.** Include the hard tasks **`T6-inplace-hard`** and
+   **`T4-additive-hard`** — the ones where round-1 failures actually fire, so the corrective
+   loop (step 5, the hard core) is genuinely exercised and not saturated away. Easy/medium
+   tasks (T1–T3) alone would never test the orchestrator where it matters (cf. the pilot's
+   ceiling effect, `journal/2026-07-08-benchmark-pilot.md`).
+4. **K repeats, no pinned seed** (BENCHMARK.md convention); report rates with the same
+   "±2 runs at K=5" caution; raise K to tighten.
+5. **Keep Layer 0 as gold and Claude as audit tier** throughout (§4). The candidate's declared
+   successes are checked against the oracle; its escalations are served by Claude and counted.
+6. **Model swapping / co-residence** as in `VERIFIER.md` §5: prefer executor + verifier +
+   orchestrator co-resident on 48 GB to avoid per-call weight swaps.
+
+## 8 · Candidate shortlist (validate, don't assume)
+
+Starting points only — the winner is whatever the campaign says, not this list. Want small,
+**disciplined tools-capable instruct** models that co-reside on 48 GB alongside the executor
+and the 4 B verifier:
+
+- A **~4–14 B general instruct** model with strong function-calling and good
+  instruction-adherence (the restraint trait, §5.1) — the sweet spot.
+- **Cross-family lightweights already flagged as co-resident** in the verifier journal
+  (gemma3 / phi4 / llama3.1) — untested for this role, worth a focused sweep.
+- Explicitly **not** a tool-happy coder model (`qwen3-coder:30b` failed the reply-inline
+  discipline as a verifier; the orchestrator's agentic recon makes that worse, not better).
+
+> Validate sizes against the ollama manifest before pulling — the verifier campaign found the
+> shortlist's advertised sizes wrong (`qwen3-coder-next` was 48 GB, not ~16 GB; a claimed
+> `qwen3-coder-14b` tag does not exist). Do the same check here.
+
+## 9 · Success criteria for this experiment
+
+- Produces, per candidate, the **`pass@N` delta vs Claude** and the **`false-success` rate**
+  over the benchmark suite, including the hard in-place / additive tasks that exercise the
+  corrective loop.
+- Every gold label traces to a mechanical oracle, never agent prose.
+- Can conclude **"no local model is safe/capable enough; keep Claude as orchestrator"** as
+  cleanly as it can pick a winner (the O1 honest-null).
+- Preserves the two presidia (§4) in every configuration tested: Layer 0 oracle as anchor,
+  Claude as escalation tier.
+- Re-runnable as new local models appear, suite and skill unchanged.
+
+Distil each campaign into `journal/YYYY-MM-DD-orchestrator-selection.md`.

@@ -56,6 +56,13 @@ plus the escalate-on-doubt rule preserve it. Which local model is safe *enough* 
 first pass is decided empirically (`docs/VERIFIER.md`), by its **false-pass rate** against the
 oracle — not by assumption.
 
+The same discipline extends one role further up: whether the **orchestrator** itself (the host
+that runs the skill, today Claude) can go **local-first** — a lightweight local model driving
+the loop, with the Layer-0 oracle still the anchor and Claude kept as the escalation tier — is
+operationalized as a falsifiable selection campaign in [`ORCHESTRATOR.md`](ORCHESTRATOR.md).
+The guard against three confabulators in a row is the reason it, too, is local-first *with
+escalation*, not a bare swap.
+
 ## Goal & non-goals
 
 **Goal:** a repeatable, observable harness to experiment with local self-scaffolding

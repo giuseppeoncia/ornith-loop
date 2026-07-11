@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Orchestrator-selection design (`docs/ORCHESTRATOR.md`): can the **orchestrator** role (the
+  host that runs the `ornith-loop` skill — today Claude) also go **local-first**, like the
+  verifier? Companion to `VERIFIER.md`, same falsifiable shape — decomposes the skill's six
+  steps by delegability (only grounding recon and corrective-grounding synthesis are genuinely
+  model-hard; the rest is already mechanical or delegated), states the falsifiable question
+  (O1: a local orchestrator matches Claude's `pass@N` on the frozen suite), and defines the
+  metric that can sink it — end-to-end `pass@N`-delta-vs-Claude plus a `false-success` rate
+  (how often it declares a broken run done), the orchestrator's analog of the verifier's
+  `effectiveFalsePass`. Keeps the two presidia against "three confabulators in a row": the
+  Layer-0 oracle as anchor and Claude as the escalation tier. Honest-null "keep Claude as the
+  orchestrator" is a valid outcome. No runner built — this doc is the spec.
 - Two-tier verification with an optional **local first-pass verifier** (`docs/VERIFIER.md`,
   `verifier/rubric.md`, `src/verifier.js`): Layer 0 stays the mechanical oracle (local, gold
   truth); Layer 1 is an LLM reviewer that can run local-first — a lightweight Ollama model
