@@ -60,7 +60,7 @@ them, sorted safest-first.
    (prediction) on the same workdir, and records both in the result row:
 
    ```bash
-   node benchmarks/bench.mjs run --task T3-inplace --arm A --repeats 5 --verifier-model qwen3-coder-14b
+   node benchmarks/bench.mjs run --task T3-inplace --arm A --repeats 5 --verifier-model qwen3-coder:30b
    node benchmarks/bench.mjs verify-report
    ```
 3. **Span the failure modes.** Include the in-place tasks (T3, T6) — the corruption cases are

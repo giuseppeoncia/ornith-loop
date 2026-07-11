@@ -74,6 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the working tree and scored as an unparseable reply → silent `uncertain`, confounding its
   escalation rate. The verifier call now passes `--no-tools`, forcing a read-only inline
   verdict. (See `journal/2026-07-10-verifier-selection.md`.)
+- Stale verifier tag in docs: the `--verifier-model qwen3-coder-14b` command examples in
+  `docs/VERIFIER.md` and `benchmarks/README.md` used a tag that does not exist on ollama; they
+  now use `qwen3-coder:30b` (the real light-coder tag, as the hardware note already states).
 
 ## [0.3.0] - 2026-07-08
 

@@ -136,7 +136,7 @@ labels — the experiment specified in [`../docs/VERIFIER.md`](../docs/VERIFIER.
 prose, never the task answer-key). Then read the scores:
 
 ```bash
-node benchmarks/bench.mjs run --task T3-inplace --arm A --repeats 5 --verifier-model qwen3-coder-14b
+node benchmarks/bench.mjs run --task T3-inplace --arm A --repeats 5 --verifier-model qwen3-coder:30b
 node benchmarks/bench.mjs verify-report
 ```
 

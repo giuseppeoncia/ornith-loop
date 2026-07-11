@@ -84,9 +84,10 @@ Already annotated in `journal/2026-07-10-verifier-selection.md` ("Recommended ne
   tag `source:"corpus"`. See `benchmarks/README.md` → "Fair cross-candidate comparison".
 - **Cross-family lightweight sweep:** score gemma3 / phi4 / llama3.1 (validated to co-reside
   with the executor) as first-pass verifiers, suite + rubric unchanged.
-- **Fix `docs/VERIFIER.md` shortlist sizes:** drop the wrong ~16 GB claim for
-  `qwen3-coder-next` (it is 48 GB) and the nonexistent `qwen3-coder-14b`; note `:30b` as the
-  real light-coder tag.
+- ~~**Fix `docs/VERIFIER.md` shortlist sizes:**~~ **done** — the shortlist and hardware note
+  carry the corrected figures (`qwen3-coder-next` is ~48 GB not ~16 GB, no `qwen3-coder-14b`
+  tag, `:30b` is the real light-coder tag); the stale `qwen3-coder-14b` command examples in
+  `VERIFIER.md`/`benchmarks/README.md` now use `qwen3-coder:30b`.
 
 ## Candidate orchestrator models (validate, don't assume)
 
