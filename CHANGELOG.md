@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at the selection harness.
 - `orn run --no-tools` — run pi with all tools disabled (forwards pi's `--no-tools`). Used by
   the Layer-1 verifier so it adjudicates read-only and must return its verdict inline.
+- Decoupled verifier scoring: `bench.mjs run --save-corpus <dir>` freezes each ornith run's
+  ground-truth evidence + gold label, and `bench.mjs verify-corpus --corpus <dir>
+  --verifier-model <id>` replays any candidate over that same frozen corpus — fair
+  cross-candidate comparison with ornith executed once. Rows tag `source:"corpus"`
+  (`verify-report` includes them, `report` skips them). Corpus is gitignored/ephemeral.
+  `run`/`verify-corpus` also accept `--results-dir <path>`.
 
 ### Changed
 - `docs/DESIGN.md`: the "no local reviewer model" non-goal is superseded by the two-tier
