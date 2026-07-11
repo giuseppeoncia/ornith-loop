@@ -171,3 +171,35 @@ export function scoreVerifier(rows) {
   out.sort((a, b) => a.effectiveFalsePass - b.effectiveFalsePass || a.escalationRate - b.escalationRate || a.model.localeCompare(b.model));
   return out;
 }
+
+// Freeze one executor run into a corpus record for decoupled verification
+// (docs/superpowers/specs/2026-07-11-decouple-executions-design.md). Stores raw
+// ground-truth evidence + the gold label so any candidate verifier can be
+// replayed later over the SAME run via buildEvidencePacket. Slims the run record
+// to the signals formatRunSignals uses and DROPS finalText — the executor's prose
+// must never reach the verifier, exactly as in the live path.
+export function corpusRecordFrom({
+  task, arm, round = 1, repeat, runId = null, goldPass,
+  goal = "", grounding = "", evidence = {}, record = null,
+} = {}) {
+  const r = record || {};
+  const slimRecord = {
+    model: r.model ?? null,
+    exit: { reason: r.exit?.reason ?? null },
+    toolCallCount: typeof r.toolCallCount === "number" ? r.toolCallCount : null,
+    toolSequence: Array.isArray(r.toolSequence) ? r.toolSequence : [],
+    workdirChange: r.workdirChange ? { changed: r.workdirChange.changed } : null,
+    flags: r.flags || {},
+  };
+  return {
+    task, arm, round, repeat, runId,
+    goldPass: Boolean(goldPass),
+    goal, grounding,
+    testCmd: evidence.testCmd ?? null,
+    testOutput: evidence.testOutput ?? "",
+    testExitCode: evidence.testExitCode ?? null,
+    changedFiles: Array.isArray(evidence.changedFiles) ? evidence.changedFiles : [],
+    diff: evidence.diff ?? "",
+    record: slimRecord,
+  };
+}
