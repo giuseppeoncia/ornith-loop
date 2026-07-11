@@ -42,6 +42,7 @@ export function assemblePrompt(arm, parts, { round = 1, extra = "" } = {}) {
 export function aggregate(rows) {
   const byKey = new Map();
   for (const r of rows) {
+    if (r && r.source === "corpus") continue; // verifier-replay rows are not executor attempts
     const key = `${r.task} ${r.arm}`;
     if (!byKey.has(key)) byKey.set(key, { task: r.task, arm: r.arm, attempts: [] });
     byKey.get(key).attempts.push(r);

@@ -66,3 +66,16 @@ test("deltas: H1/H2/H3 use passN for looped arms and pass1 for single-shot", () 
   assert.equal(d["H1_A_minus_B2"], 0); // 1 - 1
   assert.equal(d["H3_A_minus_B3"], 1); // 1 - 0
 });
+
+test("aggregate: ignores verifier-replay rows tagged source:corpus", () => {
+  const rows = [
+    { task: "T", arm: "A", repeat: 1, round: 1, pass: true, flags: {} },              // executor attempt
+    { task: "T", arm: "A", repeat: 1, round: 1, pass: false, source: "corpus",         // replay row — must be ignored
+      verifierModel: "m", verifierVerdict: "pass" },
+  ];
+  const rep = aggregate(rows);
+  assert.equal(rep.length, 1);
+  assert.equal(rep[0].repeats, 1);      // only the one executor repeat
+  assert.equal(rep[0].pass1Rate, 1);    // corpus row (pass:false) did not drag it down
+  assert.equal(rep[0].attempts, 1);     // corpus row is not counted as an attempt
+});
