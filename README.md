@@ -64,7 +64,9 @@ prints an observability summary: exit reason, ornith's self-built tool sequence,
 count, and failure-mode flags. Run `orn --help` for all options.
 
 **Requirements at runtime:** `pi` on `PATH`, Ollama running with the model pulled, and the
-`ollama` provider registered in `~/.pi/agent/models.json`.
+`ollama` provider registered in `~/.pi/agent/models.json`. **Use the exact ornith build** — a
+stock ornith GGUF has a broken chat template; see [The ornith model](#the-ornith-model-use-the-exact-build)
+below.
 
 **Tests:** `npm test` (uses `node --test`; zero dependencies).
 
@@ -150,7 +152,33 @@ per-arm breakdown, failure-mode flags, and threats to validity.
 ## Requirements
 
 - [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) on `PATH`
-- [Ollama](https://ollama.com) running locally with a self-scaffolding model pulled
-  (default `ornith-1.0-9b-64k`), registered as the `ollama` provider in
-  `~/.pi/agent/models.json`
+- [Ollama](https://ollama.com) running locally with the ornith model built (see below) and
+  registered as the `ollama` provider in `~/.pi/agent/models.json`
 - Node (v24+)
+
+### The ornith model (use the exact build)
+
+This project is designed around **Ornith 1.0 9B** under pi — but the specific build matters:
+**a stock ornith GGUF ships a broken chat template**, and pi (openai-completions provider)
+will not drive it correctly. Every result in this repo used a local build named
+`ornith-1.0-9b-64k`, made from a chat-template-**fixed** GGUF:
+
+- **Source GGUF:** [`KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF`](https://huggingface.co/KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF)
+  (~9.5 GB) — patches the chat template baked into the GGUF metadata.
+- **Modelfile** (the `-64k` = the 64 K context; low, deterministic sampling for a controller):
+
+  ```
+  FROM hf.co/KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF:latest
+  PARAMETER top_p 0.95
+  PARAMETER num_ctx 65536
+  PARAMETER temperature 1
+  ```
+
+  ```bash
+  ollama create ornith-1.0-9b-64k -f Modelfile   # build the exact tag orn/bench expect
+  ```
+
+`orn` / the benchmark driver also pass `--thinking off` (required — with thinking on, ornith
+leaks tool calls into the reasoning channel as unparseable text and nothing executes). Full
+provenance and the blob-match verification are in
+[`benchmarks/README.md`](benchmarks/README.md#the-executor-model-exact-build).
