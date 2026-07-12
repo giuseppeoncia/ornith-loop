@@ -73,7 +73,12 @@ function parseInstall(args) {
     switch (a) {
       case "-h": case "--help": return { help: true };
       case "--target": opts.target = next(); break;
-      case "--verifier": opts.verifier = next(); break;
+      case "--verifier": {
+        const v = next();
+        if (v === undefined || v.startsWith("--")) return { error: "--verifier needs a <model> value" };
+        opts.verifier = v;
+        break;
+      }
       default: return { error: `unexpected argument '${a}'` };
     }
   }
@@ -119,8 +124,8 @@ export const HELP = `orn <command> [options]
 Commands:
   run <prompt>       drive a self-scaffolding local model via pi, capturing a run record
   install-skill      install the ornith-loop skill into your coding agent(s)
-  config <get|set|path>   read/write ~/.config/ornith-loop/config.json (verifier, executor, rounds)
-  verify                  run the configured local verifier over a workdir (prints pass|fail|uncertain)
+  config <get|set|path>  read/write ~/.config/ornith-loop/config.json (verifier, executor, rounds)
+  verify                 run the configured local verifier over a workdir (prints pass|fail|uncertain)
 
 orn run <prompt> [options]
   --prompt-file <path>   read the prompt from a file (instead of a positional)
@@ -144,7 +149,7 @@ orn verify [options]
 
 orn install-skill [options]
   --target <where>       auto|claude|opencode (default: auto = every detected harness)
-  --verifier <model>      one-shot enable + set the local verifier during install
+  --verifier <model>     one-shot enable + set the local verifier during install
   env: CLAUDE_SKILLS_DIR, OPENCODE_SKILLS_DIR override install locations
 
   -h, --help             show this help`;

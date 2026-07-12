@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,6 +118,48 @@ test("orn install-skill --target claude: symlinks into CLAUDE_SKILLS_DIR", async
     assert.ok(files.includes("ornith-loop"), "skill installed at target dir");
   } finally {
     await rm(skills, { recursive: true, force: true });
+  }
+});
+
+test("orn install-skill --verifier: enables the verifier and sets its model in config", async () => {
+  const skills = await mkdtemp(join(tmpdir(), "orn-skills-"));
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  try {
+    const env = { ...process.env, CLAUDE_SKILLS_DIR: skills, XDG_CONFIG_HOME: cfgHome };
+    await pexec(process.execPath, [orn, "install-skill", "--target", "claude", "--verifier", "gemma3:4b"], { env });
+    const enabled = await pexec(process.execPath, [orn, "config", "get", "verifier.enabled"], { env });
+    assert.match(enabled.stdout, /true/);
+    const model = await pexec(process.execPath, [orn, "config", "get", "verifier.model"], { env });
+    assert.match(model.stdout, /gemma3:4b/);
+  } finally {
+    await rm(skills, { recursive: true, force: true });
+    await rm(cfgHome, { recursive: true, force: true });
+  }
+});
+
+test("orn run: uses config executor.model unless --model overrides it", async () => {
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  const runs = await mkdtemp(join(tmpdir(), "orn-cli-"));
+  try {
+    const env = { ...process.env, XDG_CONFIG_HOME: cfgHome, ORN_PI_BIN: fakePi, FAKE_PI_MODE: "success" };
+    await pexec(process.execPath, [orn, "config", "set", "executor.model", "some-fake-model"], { env });
+
+    const { stdout } = await pexec(process.execPath, [orn, "run", "hi", "--runs-dir", runs], { env });
+    const recordPath = stdout.match(/record: (.*)/)[1].trim();
+    const record = JSON.parse(await readFile(recordPath, "utf8"));
+    assert.equal(record.model, "some-fake-model");
+
+    const { stdout: stdout2 } = await pexec(
+      process.execPath,
+      [orn, "run", "hi", "--runs-dir", runs, "--model", "other-model"],
+      { env }
+    );
+    const recordPath2 = stdout2.match(/record: (.*)/)[1].trim();
+    const record2 = JSON.parse(await readFile(recordPath2, "utf8"));
+    assert.equal(record2.model, "other-model");
+  } finally {
+    await rm(cfgHome, { recursive: true, force: true });
+    await rm(runs, { recursive: true, force: true });
   }
 });
 

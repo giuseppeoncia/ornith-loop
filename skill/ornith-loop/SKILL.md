@@ -50,10 +50,10 @@ model. `orn` and `pi` behave identically on every host.
    true` / `orn config set verifier.model <id>`; pick the model empirically with
    `benchmarks/bench.mjs verify-report` (see [`docs/VERIFIER.md`](../../docs/VERIFIER.md)) —
    the metric that matters is its **false-pass rate**, since ornith already confabulates.
-5. **Corrective round (bounded — `orn config get correctiveRounds`, default 3).** Add *grounding* the run revealed was missing
-   — never scaffold. If it stalls narrating "now I'll do X", the task is likely too big:
-   shrink the goal, keep it additive. After N rounds still failing, STOP and report the
-   failure mode rather than spoon-feeding steps.
+5. **Corrective round (bounded — `orn config get correctiveRounds`, default 3).** Add
+   *grounding* the run revealed was missing — never scaffold. If it stalls narrating "now
+   I'll do X", the task is likely too big: shrink the goal, keep it additive. After N
+   rounds still failing, STOP and report the failure mode rather than spoon-feeding steps.
 6. **Journal.** Write `journal/YYYY-MM-DD-<label>.md` using the template in
    `journal/README.md`, embedding the run summary and your verification verdict.
 

@@ -11,7 +11,7 @@ import { snapshot, diffSnapshots } from "../src/git.js";
 import { buildRecord, writeRecord } from "../src/record.js";
 import { formatSummary } from "../src/summary.js";
 import { detectHarnesses, resolveTargets, installSkill, ensureDefaultConfig, discoveryMessage } from "../src/install.js";
-import { loadConfig, configPath, setConfigKey, getConfigKey } from "../src/config.js";
+import { loadConfig, configPath, setConfigKey, getConfigKey, KNOWN_KEYS } from "../src/config.js";
 import { runVerify } from "../src/verify.js";
 
 const parsed = parseArgs(process.argv.slice(2));
@@ -70,6 +70,10 @@ if (options.command === "config") {
   if (options.action === "get") {
     const cfg = loadConfig();
     if (options.key) {
+      if (!(options.key in KNOWN_KEYS)) {
+        process.stderr.write(`orn: unknown key '${options.key}': one of ${Object.keys(KNOWN_KEYS).join(", ")}\n`);
+        process.exit(2);
+      }
       const v = getConfigKey(cfg, options.key);
       process.stdout.write((v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)) + "\n");
     } else {
@@ -88,6 +92,10 @@ if (options.command === "config") {
 
 if (options.command === "verify") {
   const result = await runVerify(options);
+  if (result.error) {
+    process.stderr.write(`orn: ${result.error}\n`);
+    process.exit(2);
+  }
   if (result.notConfigured) {
     process.stderr.write(
       "orn verify: no local verifier configured — Claude verifies inline.\n" +

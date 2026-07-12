@@ -17,8 +17,22 @@ export async function runVerify(options, { config = loadConfig(), env = process.
 
   const testArgv = options.testCmd.trim().split(/\s+/);
   const ev = gatherEvidence(options.workdir, testArgv);
-  const goal = options.goalFile ? readFileSync(options.goalFile, "utf8") : "";
-  const grounding = options.groundingFile ? readFileSync(options.groundingFile, "utf8") : "";
+  let goal = "";
+  if (options.goalFile) {
+    try {
+      goal = readFileSync(options.goalFile, "utf8");
+    } catch (err) {
+      return { error: `verify: cannot read --goal-file ${options.goalFile}: ${err.message}` };
+    }
+  }
+  let grounding = "";
+  if (options.groundingFile) {
+    try {
+      grounding = readFileSync(options.groundingFile, "utf8");
+    } catch (err) {
+      return { error: `verify: cannot read --grounding-file ${options.groundingFile}: ${err.message}` };
+    }
+  }
   const packet = buildEvidencePacket({
     goal, grounding,
     testCmd: ev.testCmd, testOutput: ev.testOutput, testExitCode: ev.testExitCode,
