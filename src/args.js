@@ -66,13 +66,14 @@ function parseRun(args) {
 }
 
 function parseInstall(args) {
-  const opts = { command: "install-skill", target: "auto" };
+  const opts = { command: "install-skill", target: "auto", verifier: null };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     const next = () => args[++i];
     switch (a) {
       case "-h": case "--help": return { help: true };
       case "--target": opts.target = next(); break;
+      case "--verifier": opts.verifier = next(); break;
       default: return { error: `unexpected argument '${a}'` };
     }
   }
@@ -143,6 +144,7 @@ orn verify [options]
 
 orn install-skill [options]
   --target <where>       auto|claude|opencode (default: auto = every detected harness)
+  --verifier <model>      one-shot enable + set the local verifier during install
   env: CLAUDE_SKILLS_DIR, OPENCODE_SKILLS_DIR override install locations
 
   -h, --help             show this help`;

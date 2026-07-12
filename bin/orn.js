@@ -2,6 +2,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import { parseArgs, HELP } from "../src/args.js";
 import { invokePi } from "../src/invoke.js";
 import { parseEventStream, summarizeEvents } from "../src/parse.js";
@@ -9,7 +10,7 @@ import { detectFlags } from "../src/flags.js";
 import { snapshot, diffSnapshots } from "../src/git.js";
 import { buildRecord, writeRecord } from "../src/record.js";
 import { formatSummary } from "../src/summary.js";
-import { detectHarnesses, resolveTargets, installSkill } from "../src/install.js";
+import { detectHarnesses, resolveTargets, installSkill, ensureDefaultConfig, discoveryMessage } from "../src/install.js";
 import { loadConfig, configPath, setConfigKey, getConfigKey } from "../src/config.js";
 import { runVerify } from "../src/verify.js";
 
@@ -43,6 +44,21 @@ if (options.command === "install-skill") {
   for (const r of installSkill(targets, sourceDir)) {
     process.stdout.write(`${r.method} ${r.dest} (${r.name})\n`);
   }
+  if (options.verifier) {
+    setConfigKey("verifier.enabled", "true");
+    setConfigKey("verifier.model", options.verifier);
+  } else {
+    ensureDefaultConfig(process.env, homedir());
+  }
+  const cfg = loadConfig();
+  let ollamaModels = [];
+  try {
+    const out = spawnSync("ollama", ["list"], { encoding: "utf8" });
+    if (out.status === 0) {
+      ollamaModels = (out.stdout || "").split("\n").slice(1).map((l) => l.split(/\s+/)[0]).filter(Boolean);
+    }
+  } catch { /* ollama absent — omit the list */ }
+  process.stdout.write(discoveryMessage(cfg, ollamaModels));
   process.exit(0);
 }
 

@@ -120,3 +120,22 @@ test("orn install-skill --target claude: symlinks into CLAUDE_SKILLS_DIR", async
     await rm(skills, { recursive: true, force: true });
   }
 });
+
+test("orn install-skill: writes a default config and prints the verifier pointer", async () => {
+  const skills = await mkdtemp(join(tmpdir(), "orn-skills-"));
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  try {
+    const { stdout } = await pexec(process.execPath, [orn, "install-skill", "--target", "claude"], {
+      env: { ...process.env, CLAUDE_SKILLS_DIR: skills, XDG_CONFIG_HOME: cfgHome },
+    });
+    assert.match(stdout, /Local verifier: OFF/);
+    assert.match(stdout, /verifier\.enabled true/);
+    const { stdout: got } = await pexec(process.execPath, [orn, "config", "get", "verifier.enabled"], {
+      env: { ...process.env, XDG_CONFIG_HOME: cfgHome },
+    });
+    assert.match(got, /false/);
+  } finally {
+    await rm(skills, { recursive: true, force: true });
+    await rm(cfgHome, { recursive: true, force: true });
+  }
+});

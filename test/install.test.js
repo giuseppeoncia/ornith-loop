@@ -4,7 +4,8 @@ import { mkdtemp, rm, readlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { skillDirs, detectHarnesses, resolveTargets, installSkill } from "../src/install.js";
+import { skillDirs, detectHarnesses, resolveTargets, installSkill, ensureDefaultConfig, discoveryMessage } from "../src/install.js";
+import { defaultConfig } from "../src/config.js";
 
 test("skillDirs uses defaults, env overrides win", () => {
   const d = skillDirs({}, "/home/u");
@@ -71,4 +72,25 @@ test("installSkill symlinks the source into each target and is idempotent", asyn
     await rm(src, { recursive: true, force: true });
     await rm(dest, { recursive: true, force: true });
   }
+});
+
+test("ensureDefaultConfig writes defaults once, is idempotent", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "orn-inst-"));
+  try {
+    const env = { XDG_CONFIG_HOME: dir };
+    const first = ensureDefaultConfig(env, "/home/u");
+    assert.equal(first.created, true);
+    assert.ok(existsSync(first.path));
+    assert.equal(ensureDefaultConfig(env, "/home/u").created, false); // already there
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("discoveryMessage: names the enable command; lists detected models; omits list when none", () => {
+  const on = discoveryMessage(defaultConfig(), ["qwen3.5:4b", "gemma3:4b"]);
+  assert.match(on, /verifier.enabled true/);
+  assert.match(on, /qwen3\.5:4b/);
+  const none = discoveryMessage(defaultConfig(), []);
+  assert.doesNotMatch(none, /Ollama models detected/);
 });
