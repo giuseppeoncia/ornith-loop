@@ -129,8 +129,9 @@ function loadRubric() {
 
 // Gather the MECHANICAL evidence a verifier adjudicates: test output, the diff,
 // and the changed-file list — all ground truth, computed by us, never claimed
-// by ornith. Runs AFTER the oracle (which owns the gold label), so staging the
-// git index here is harmless: the workdir is discarded next.
+// by ornith. Stages the index (`git add -A`) so the diff includes untracked
+// (new) files too; callers/oracles must therefore read changed files from
+// `git status --porcelain`, not an unstaged `git diff`.
 function gatherEvidence(task, wd) {
   const testCmd = Array.isArray(task.meta.testCmd) && task.meta.testCmd.length ? task.meta.testCmd : ["node", "--test"];
   const t = spawnSync(testCmd[0], testCmd.slice(1), { cwd: wd, encoding: "utf8" });
@@ -355,8 +356,10 @@ function cmdOrchestrate(o) {
   const orchestratorModel = typeof o["orchestrator-model"] === "string" ? o["orchestrator-model"] : die("--orchestrator-model <id> required");
   const verifierModel = typeof o["verifier-model"] === "string" ? o["verifier-model"] : "qwen3.5:4b";
   const maxRounds = Number(o.rounds || 3);
+  if (!Number.isInteger(maxRounds) || maxRounds < 1) die("--rounds must be an integer >= 1");
   const repeats = o.repeat ? [Number(o.repeat)] : Array.from({ length: Number(o.repeats || 1) }, (_, i) => i + 1);
   const resultsDir = typeof o["results-dir"] === "string" ? o["results-dir"] : RESULTS_DIR;
+  if (orchestratorModel === verifierModel) process.stderr.write(`warning: --orchestrator-model and --verifier-model are the same ('${orchestratorModel}') — the verifier and orchestrator then run on one model, collapsing the independent check ORCHESTRATOR.md §4 keeps separate.\n`);
 
   const t = loadTask(task);
   keepAwake();
@@ -373,59 +376,62 @@ function cmdOrchestrate(o) {
     let finalWd = null;
     let finalRunsDir = null;
 
-    for (let round = 1; round <= maxRounds; round++) {
-      roundsUsed = round;
-      // discard a prior round's workdir (rounds are fresh attempts, not continuations)
+    try {
+      for (let round = 1; round <= maxRounds; round++) {
+        roundsUsed = round;
+        // discard a prior round's workdir (rounds are fresh attempts, not continuations)
+        if (finalWd) rmSync(finalWd, { recursive: true, force: true });
+        if (finalRunsDir) rmSync(finalRunsDir, { recursive: true, force: true });
+        const wd = makeWorkdir(t);
+        const runsDir = mkdtempSync(join(tmpdir(), `bench-runs-${t.meta.id}-`));
+        finalWd = wd;
+        finalRunsDir = runsDir;
+
+        const prompt = `${(t.parts.goal || "").trim()}\n\n${grounding}`.trim();
+        const orn = runOrn({ prompt, workdir: wd, label: `${task}-orch-k${repeat}-r${round}`, runsDir });
+        const ev = gatherEvidence(t, wd);
+        const verdict = adjudicate({
+          goal: t.parts.goal, grounding, evidence: ev,
+          record: orn.record, model: verifierModel, label: `verify-${t.meta.id}`,
+        });
+
+        const decisionPrompt =
+          `${rubric}\n\n---\n\n# ORCHESTRATOR DECISION\n\n` +
+          `## GOAL\n${(t.parts.goal || "").trim()}\n\n` +
+          `## GROUNDING ALREADY SENT\n${grounding}\n\n` +
+          `## LAST ROUND EVIDENCE\n` +
+          `test exit: ${ev.testExitCode}\nchanged files: ${ev.changedFiles.join(", ") || "(none)"}\n\n` +
+          `test output:\n${ev.testOutput}\n\ndiff:\n${ev.diff}\n\n` +
+          `## LAYER-1 VERIFIER VERDICT\nverdict: ${verdict.verdict}\nreason: ${verdict.reason}\n\n` +
+          `Rounds used: ${round} of ${maxRounds}.`;
+        const decRunsDir = mkdtempSync(join(tmpdir(), "bench-orch-"));
+        let decision;
+        try {
+          const dec = runOrn({ prompt: decisionPrompt, model: orchestratorModel, label: `${task}-orch-decide-k${repeat}-r${round}`, runsDir: decRunsDir, noTools: true });
+          decision = parseRoundDecision(dec.record?.finalText || "");
+        } finally {
+          rmSync(decRunsDir, { recursive: true, force: true });
+        }
+        reason = decision.reason;
+
+        if (decision.action === "done") { outcome = "done"; break; }
+        if (decision.action === "retry" && round < maxRounds) { grounding = `${grounding}\n\n${decision.grounding}`.trim(); continue; }
+        outcome = "escalate"; break; // escalate, or retry with the round budget spent
+      }
+
+      // Layer-0 gold oracle on the FINAL workdir — the anchor, never shown to the candidate.
+      const oracle = runOracle(t, finalWd, "");
+
+      const row = {
+        task, repeat, orchestratorModel, orchestratorOutcome: outcome,
+        pass: oracle.pass, orchestratorRounds: roundsUsed, orchestratorReason: reason, verifierModel,
+      };
+      appendFileSync(resultsFile, JSON.stringify(row) + "\n");
+      process.stdout.write(`${task}-orch-k${repeat}: ${outcome} (rounds ${roundsUsed}, oracle ${oracle.pass ? "PASS" : "fail"})\n`);
+    } finally {
       if (finalWd) rmSync(finalWd, { recursive: true, force: true });
       if (finalRunsDir) rmSync(finalRunsDir, { recursive: true, force: true });
-      const wd = makeWorkdir(t);
-      const runsDir = mkdtempSync(join(tmpdir(), `bench-runs-${t.meta.id}-`));
-      finalWd = wd;
-      finalRunsDir = runsDir;
-
-      const prompt = `${(t.parts.goal || "").trim()}\n\n${grounding}`.trim();
-      const orn = runOrn({ prompt, workdir: wd, label: `${task}-orch-k${repeat}-r${round}`, runsDir });
-      const ev = gatherEvidence(t, wd);
-      const verdict = adjudicate({
-        goal: t.parts.goal, grounding, evidence: ev,
-        record: orn.record, model: verifierModel, label: `verify-${t.meta.id}`,
-      });
-
-      const decisionPrompt =
-        `${rubric}\n\n---\n\n# ORCHESTRATOR DECISION\n\n` +
-        `## GOAL\n${(t.parts.goal || "").trim()}\n\n` +
-        `## GROUNDING ALREADY SENT\n${grounding}\n\n` +
-        `## LAST ROUND EVIDENCE\n` +
-        `test exit: ${ev.testExitCode}\nchanged files: ${ev.changedFiles.join(", ") || "(none)"}\n\n` +
-        `test output:\n${ev.testOutput}\n\ndiff:\n${ev.diff}\n\n` +
-        `## LAYER-1 VERIFIER VERDICT\nverdict: ${verdict.verdict}\nreason: ${verdict.reason}\n\n` +
-        `Rounds used: ${round} of ${maxRounds}.`;
-      const decRunsDir = mkdtempSync(join(tmpdir(), "bench-orch-"));
-      let decision;
-      try {
-        const dec = runOrn({ prompt: decisionPrompt, model: orchestratorModel, label: `orch-${t.meta.id}-k${repeat}-r${round}`, runsDir: decRunsDir, noTools: true });
-        decision = parseRoundDecision(dec.record?.finalText || "");
-      } finally {
-        rmSync(decRunsDir, { recursive: true, force: true });
-      }
-      reason = decision.reason;
-
-      if (decision.action === "done") { outcome = "done"; break; }
-      if (decision.action === "retry" && round < maxRounds) { grounding = `${grounding}\n\n${decision.grounding}`.trim(); continue; }
-      outcome = "escalate"; break; // escalate, or retry with the round budget spent
     }
-
-    // Layer-0 gold oracle on the FINAL workdir — the anchor, never shown to the candidate.
-    const oracle = runOracle(t, finalWd, "");
-    rmSync(finalWd, { recursive: true, force: true });
-    rmSync(finalRunsDir, { recursive: true, force: true });
-
-    const row = {
-      task, repeat, orchestratorModel, orchestratorOutcome: outcome,
-      pass: oracle.pass, orchestratorRounds: roundsUsed, orchestratorReason: reason, verifierModel,
-    };
-    appendFileSync(resultsFile, JSON.stringify(row) + "\n");
-    process.stdout.write(`${task}-orch-k${repeat}: ${outcome} (rounds ${roundsUsed}, oracle ${oracle.pass ? "PASS" : "fail"})\n`);
   }
 }
 

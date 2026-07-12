@@ -39,6 +39,7 @@ test("orchestrate: dry-run via fake-pi emits one schema-correct row (no ollama)"
     assert.equal(r.orchestratorRounds, 1);           // done on round 1
     assert.equal(r.verifierModel, "fake-verifier");
     assert.equal(typeof r.pass, "boolean");          // oracle ran (false: fake-pi doesn't solve)
+    assert.equal(typeof r.orchestratorReason, "string");
   } finally {
     rmSync(resultsDir, { recursive: true, force: true });
   }
