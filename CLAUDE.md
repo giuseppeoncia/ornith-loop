@@ -76,9 +76,20 @@ These are empirical, model-specific lessons — treat as grounding for any futur
 - `orn run "<goal + grounding>" [--workdir <repo>] [--label <name>] [--model <id>]
   [--thinking off] [--timeout <sec>] [--prompt-file <path>] [--runs-dir <path>]` —
   invoke pi against Ollama and capture a run record under `runs/`.
-- `orn install-skill [--target auto|claude|opencode]` — install the `ornith-loop` skill into
-  the detected coding agent(s) (`~/.claude/skills`, `~/.config/opencode/skills`).
-- `npm test` — run the test suite (`node --test`, zero deps).
+- `orn install-skill [--target auto|claude|opencode] [--verifier <model>]` — install the
+  `ornith-loop` skill into the detected coding agent(s) (`~/.claude/skills`,
+  `~/.config/opencode/skills`); also writes a default config if absent and prints a
+  discoverable pointer. `--verifier <model>` is a one-shot enable + set of the local verifier
+  during install.
+- `orn config get [key] | set <key> <value> | path` — read/write
+  `~/.config/ornith-loop/config.json` (`executor.model`, `verifier.enabled`,
+  `verifier.model`, `correctiveRounds`); missing/malformed file falls back to defaults.
+- `orn verify --workdir <repo> --test-cmd "<cmd>" [--model <id>] [--goal-file <path>]
+  [--grounding-file <path>]` — mechanized, read-only Layer-1 verify; prints
+  `pass`/`fail`/`uncertain` + a reason. Resolves the model from `--model`, else
+  `verifier.model` when `verifier.enabled` (default off — Claude verifies inline until
+  a verifier is configured).
+- `npm test` — run the test suite (`node --test`, zero deps, 102 tests).
 
 No linter configured yet.
 

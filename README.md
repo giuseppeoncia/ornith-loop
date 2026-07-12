@@ -83,6 +83,21 @@ orn install-skill --target opencode   # ~/.config/opencode/skills/ornith-loop
 It encodes the method: grounding recon → minimal-scaffold prompt → `orn` run → external
 verification → bounded corrective loop (default 3) → journal.
 
+### Configurable local verifier (optional)
+
+By default Claude verifies every run inline. If you've picked a local model as a safe
+first-pass verifier (see [`docs/VERIFIER.md`](docs/VERIFIER.md)), configure and use it via
+`orn config` / `orn verify`:
+
+```bash
+orn config set verifier.enabled true
+orn config set verifier.model qwen3.5:4b
+orn verify --workdir /path/to/target-repo --test-cmd "npm test"
+```
+
+Config lives at `~/.config/ornith-loop/config.json`; run `orn config get` / `orn --help` for
+all keys and flags.
+
 ## Goal & non-goals
 
 **Goal:** learn which grounding lets a self-scaffolding local model succeed, repeatably and

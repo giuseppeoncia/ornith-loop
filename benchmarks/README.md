@@ -175,6 +175,21 @@ node benchmarks/bench.mjs verify-report
 gitignored/ephemeral (conclusions go in the journal). `verify-corpus` rows are tagged
 `source:"corpus"`: `verify-report` includes them, `report` ignores them.
 
+### Selection vs. production
+
+Everything above (`bench.mjs run --verifier-model`, `verify-report`, `verify-corpus`) is the
+**selection** harness — for empirically choosing a candidate model against gold labels. Once
+you've picked one, put it into production via the `orn` CLI, not this harness:
+
+```bash
+orn config set verifier.enabled true
+orn config set verifier.model qwen3.5:4b
+orn verify --workdir <repo> --test-cmd "npm test"
+```
+
+See [`../docs/VERIFIER.md`](../docs/VERIFIER.md#production-use-orn-config--orn-verify) for
+details.
+
 ## Selecting a local orchestrator (the loop driver)
 
 The next role after the verifier: can a lightweight **local** model drive the whole loop

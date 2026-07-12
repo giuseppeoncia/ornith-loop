@@ -14,6 +14,7 @@ there.
 | Method + three-role design (`DESIGN.md`) | done |
 | Benchmark suite + oracles + driver (`BENCHMARK.md`, `benchmarks/`) | done — pilot run (K=5) + K=20 |
 | Layer-1 local **verifier** selection (`VERIFIER.md`) | `qwen3.5:4b` **confirmed** at K=20 (effFP=0%); follow-ups open |
+| Configurable local verifier (`orn config` / `orn verify`) | done |
 | **Orchestrator** design (`ORCHESTRATOR.md`) | done |
 | Orchestrator **scoring skeleton** (`src/orchestrator.js`, `orchestrate-report`) | done, unit-tested |
 | Orchestrator **Phase-1 baseline** (Claude-in-seat, `journal/2026-07-12-orchestrator-selection.md`) | done — K=5 on T6+T4: pass@N 100%, effFS 0%; `orchestrate-report` validated |
@@ -28,7 +29,7 @@ All of the above is committed and pushed to
 git fetch origin claude/lightweight-orchestrator-analysis-v9m7kc
 git checkout claude/lightweight-orchestrator-analysis-v9m7kc
 git pull origin claude/lightweight-orchestrator-analysis-v9m7kc
-npm ci && npm test          # expect green (75 tests)
+npm ci && npm test          # expect green (102 tests)
 ```
 
 Prerequisites (see `benchmarks/README.md` for detail):
@@ -81,7 +82,10 @@ suite). Spec: `ORCHESTRATOR.md §7` (protocol) and §9 (the row schema it must e
 
 ### 3 · PARALLEL — verifier follow-ups (independent of the orchestrator work)
 Already annotated in `journal/2026-07-10-verifier-selection.md` ("Recommended next steps" /
-"Still open"); consolidated here so they aren't lost:
+"Still open"); consolidated here so they aren't lost. Note: the local verifier is now
+**configurable, mechanized, and discoverable** — `orn config` / `orn verify` and
+`orn install-skill --verifier <model>` (see `VERIFIER.md` → "Production use"); the items
+below are about *which model* to pick, not the plumbing to run it.
 
 - ~~**Decouple executions:**~~ **done** (merged from `develop`) — `run --save-corpus <dir>`
   freezes each run's evidence + gold label, and `verify-corpus --corpus <dir> --verifier-model

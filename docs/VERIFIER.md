@@ -82,6 +82,34 @@ them, sorted safest-first.
    an unparseable reply → silent `uncertain`, which confounds the escalation rate. (Regression
    found and fixed 2026-07-10; see the journal.)
 
+## Production use: `orn config` / `orn verify`
+
+The protocol above is the **selection** harness — `bench.mjs run --verifier-model` +
+`bench.mjs verify-report` — for empirically picking a candidate. Once a candidate is chosen,
+the local-first verify is **configurable and mechanized** via the `orn` CLI itself, distinct
+from that selection harness:
+
+- **Config** lives at `~/.config/ornith-loop/config.json` (honors `XDG_CONFIG_HOME`; missing
+  or malformed file falls back to defaults, never throws). The relevant keys:
+  `verifier.enabled` (boolean, default `false`) and `verifier.model` (default `qwen3.5:4b`).
+  Set them with:
+
+  ```bash
+  orn config set verifier.enabled true
+  orn config set verifier.model qwen3-coder:30b
+  ```
+
+  `orn install-skill --verifier <model>` does both in one shot at install time.
+- **`orn verify --workdir <repo> --test-cmd "<cmd>" [--model <id>] [--goal-file <path>]
+  [--grounding-file <path>]`** is the production verify command: it runs the same read-only
+  (`--no-tools`), rubric-adjudicated Layer-1 check described above and prints
+  `pass`/`fail`/`uncertain` plus a reason. It resolves the model from `--model`, else from
+  `verifier.model` when `verifier.enabled` is true; with neither set it exits 3 and prints
+  guidance instead of guessing.
+- **Default is off.** Until a verifier is configured (or `--model` is passed explicitly),
+  `orn verify` declines to run and Claude remains the verifier — no behavior change for
+  anyone who hasn't opted in.
+
 ## Candidate shortlist (validate, don't assume)
 
 Starting points for the first pass; the winner is whatever `verify-report` says, not this
