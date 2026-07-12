@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
 import { buildEvidencePacket, parseVerdict, scoreVerifier, corpusRecordFrom } from "../src/verifier.js";
 import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision } from "../src/orchestrator.js";
+import { gatherEvidence } from "../src/evidence.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ORN = resolve(HERE, "..", "bin", "orn.js");
@@ -127,23 +128,6 @@ function loadRubric() {
   return RUBRIC_CACHE;
 }
 
-// Gather the MECHANICAL evidence a verifier adjudicates: test output, the diff,
-// and the changed-file list — all ground truth, computed by us, never claimed
-// by ornith. Stages the index (`git add -A`) so the diff includes untracked
-// (new) files too; callers/oracles must therefore read changed files from
-// `git status --porcelain`, not an unstaged `git diff`.
-function gatherEvidence(task, wd) {
-  const testCmd = Array.isArray(task.meta.testCmd) && task.meta.testCmd.length ? task.meta.testCmd : ["node", "--test"];
-  const t = spawnSync(testCmd[0], testCmd.slice(1), { cwd: wd, encoding: "utf8" });
-  const testOutput = ((t.stdout || "") + (t.stderr || "")).slice(0, 4000);
-  const git = (args) => spawnSync("git", args, { cwd: wd, encoding: "utf8" });
-  git(["add", "-A"]); // stage so the diff includes new (untracked) files too
-  const diff = (git(["diff", "--cached"]).stdout || "").slice(0, 8000);
-  const status = git(["status", "--porcelain"]).stdout || "";
-  const changedFiles = status.split("\n").map((l) => l.slice(3).trim()).filter(Boolean);
-  return { testCmd, testOutput, testExitCode: t.status, diff, changedFiles };
-}
-
 // Adjudicate a pre-gathered evidence bundle with a verifier model, read-only.
 // Shared by the coupled `run --verifier-model` path and `verify-corpus`. The
 // verifier reads the packet from the prompt (no --workdir) and MUST reply inline
@@ -208,7 +192,7 @@ function cmdRun(o) {
         model: orn.record?.model || model || null,
       };
       // Gather the mechanical evidence once if either consumer needs it.
-      const ev = verifierModel || saveCorpus ? gatherEvidence(t, wd) : null;
+      const ev = verifierModel || saveCorpus ? gatherEvidence(wd, t.meta.testCmd) : null;
       if (saveCorpus && ev) {
         const rec = corpusRecordFrom({
           task, arm, round, repeat, runId: orn.record?.runId || null,
@@ -389,7 +373,7 @@ function cmdOrchestrate(o) {
 
         const prompt = `${(t.parts.goal || "").trim()}\n\n${grounding}`.trim();
         const orn = runOrn({ prompt, workdir: wd, label: `${task}-orch-k${repeat}-r${round}`, runsDir });
-        const ev = gatherEvidence(t, wd);
+        const ev = gatherEvidence(wd, t.meta.testCmd);
         const verdict = adjudicate({
           goal: t.parts.goal, grounding, evidence: ev,
           record: orn.record, model: verifierModel, label: `verify-${t.meta.id}`,
