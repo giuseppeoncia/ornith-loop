@@ -69,6 +69,16 @@ test("run parsing still works after dispatch refactor", () => {
   assert.equal(options.label, "x");
 });
 
+test("verify: required workdir + test-cmd, optional model/goal/grounding", () => {
+  const { options } = parseArgs(["verify", "--workdir", "/r", "--test-cmd", "node --test", "--model", "qwen3.5:4b"]);
+  assert.equal(options.command, "verify");
+  assert.equal(options.workdir, "/r");
+  assert.equal(options.testCmd, "node --test");
+  assert.equal(options.model, "qwen3.5:4b");
+  assert.match(parseArgs(["verify", "--test-cmd", "node --test"]).error, /workdir/);
+  assert.match(parseArgs(["verify", "--workdir", "/r"]).error, /test-cmd/);
+});
+
 test("config: get/set/path parse", () => {
   assert.deepEqual(parseArgs(["config", "path"]).options, { command: "config", action: "path" });
   assert.deepEqual(parseArgs(["config", "get", "verifier.model"]).options, { command: "config", action: "get", key: "verifier.model" });

@@ -11,6 +11,7 @@ import { buildRecord, writeRecord } from "../src/record.js";
 import { formatSummary } from "../src/summary.js";
 import { detectHarnesses, resolveTargets, installSkill } from "../src/install.js";
 import { loadConfig, configPath, setConfigKey, getConfigKey } from "../src/config.js";
+import { runVerify } from "../src/verify.js";
 
 const parsed = parseArgs(process.argv.slice(2));
 if (parsed.help) {
@@ -66,6 +67,19 @@ if (options.command === "config") {
     process.exit(2);
   }
   process.stdout.write(`set ${options.key} = ${options.value}  (${res.path})\n`);
+  process.exit(0);
+}
+
+if (options.command === "verify") {
+  const result = await runVerify(options);
+  if (result.notConfigured) {
+    process.stderr.write(
+      "orn verify: no local verifier configured — Claude verifies inline.\n" +
+        "Enable one: orn config set verifier.enabled true && orn config set verifier.model <id>\n"
+    );
+    process.exit(3);
+  }
+  process.stdout.write(`${result.verdict.verdict}\n${result.verdict.reason}\n`);
   process.exit(0);
 }
 
