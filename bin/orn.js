@@ -93,6 +93,8 @@ if (options.promptFile) {
   }
 }
 
+if (!options.modelExplicit) options.model = loadConfig().executor.model;
+
 const timestamp = new Date().toISOString();
 const safeLabel = options.label.replace(/[^A-Za-z0-9._-]/g, "-");
 const runId = `${timestamp.replace(/[:.]/g, "-")}_${safeLabel}`;

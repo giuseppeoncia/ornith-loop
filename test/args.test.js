@@ -87,3 +87,8 @@ test("config: get/set/path parse", () => {
   assert.match(parseArgs(["config", "set", "onlykey"]).error, /needs <key> <value>/);
   assert.match(parseArgs(["config", "bogus"]).error, /get.*set.*path/);
 });
+
+test("run: modelExplicit is false by default, true when --model given", () => {
+  assert.equal(parseArgs(["run", "hi"]).options.modelExplicit, false);
+  assert.equal(parseArgs(["run", "hi", "--model", "x"]).options.modelExplicit, true);
+});

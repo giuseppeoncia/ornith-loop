@@ -23,6 +23,7 @@ function parseRun(args) {
     prompt: "",
     promptFile: null,
     model: "ornith-1.0-9b-64k",
+    modelExplicit: false,
     provider: "ollama",
     thinking: "off",
     timeoutSec: 900,
@@ -38,7 +39,7 @@ function parseRun(args) {
     const next = () => args[++i];
     switch (a) {
       case "--prompt-file": opts.promptFile = next(); break;
-      case "--model": opts.model = next(); break;
+      case "--model": opts.model = next(); opts.modelExplicit = true; break;
       case "--provider": opts.provider = next(); break;
       case "--thinking": opts.thinking = next(); break;
       case "--timeout": opts.timeoutSec = Number(next()); break;

@@ -25,6 +25,7 @@ import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from
 import { buildEvidencePacket, parseVerdict, scoreVerifier, corpusRecordFrom } from "../src/verifier.js";
 import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision } from "../src/orchestrator.js";
 import { gatherEvidence } from "../src/evidence.js";
+import { loadConfig } from "../src/config.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ORN = resolve(HERE, "..", "bin", "orn.js");
@@ -339,7 +340,7 @@ function cmdOrchestrate(o) {
   const task = o.task || die("--task required");
   const orchestratorModel = typeof o["orchestrator-model"] === "string" ? o["orchestrator-model"] : die("--orchestrator-model <id> required");
   const verifierModel = typeof o["verifier-model"] === "string" ? o["verifier-model"] : "qwen3.5:4b";
-  const maxRounds = Number(o.rounds || 3);
+  const maxRounds = o.rounds !== undefined && o.rounds !== true ? Number(o.rounds) : loadConfig().correctiveRounds;
   if (!Number.isInteger(maxRounds) || maxRounds < 1) die("--rounds must be an integer >= 1");
   const repeats = o.repeat ? [Number(o.repeat)] : Array.from({ length: Number(o.repeats || 1) }, (_, i) => i + 1);
   const resultsDir = typeof o["results-dir"] === "string" ? o["results-dir"] : RESULTS_DIR;
