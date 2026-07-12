@@ -91,8 +91,10 @@ below are about *which model* to pick, not the plumbing to run it.
   freezes each run's evidence + gold label, and `verify-corpus --corpus <dir> --verifier-model
   <id>` replays any candidate over that identical frozen corpus (ornith executed once). Rows
   tag `source:"corpus"`. See `benchmarks/README.md` → "Fair cross-candidate comparison".
-- **Cross-family lightweight sweep:** score gemma3 / phi4 / llama3.1 (validated to co-reside
-  with the executor) as first-pass verifiers, suite + rubric unchanged.
+- **Cross-family lightweight sweep:** score current-gen cross-family lightweights as
+  first-pass verifiers (suite + rubric unchanged) — see the July-2026-verified shortlist in
+  `ORCHESTRATOR.md §8` (`gemma4:e4b-it`, `qwen3:8b`, `llama3.1:8b`); tool-calling is not a
+  gate for the verifier's inline `--no-tools` role.
 - ~~**Fix `docs/VERIFIER.md` shortlist sizes:**~~ **done** — the shortlist and hardware note
   carry the corrected figures (`qwen3-coder-next` is ~48 GB not ~16 GB, no `qwen3-coder-14b`
   tag, `:30b` is the real light-coder tag); the stale `qwen3-coder-14b` command examples in
@@ -100,9 +102,12 @@ below are about *which model* to pick, not the plumbing to run it.
 
 ## Candidate orchestrator models (validate, don't assume)
 
-Want a **~4–14 B disciplined tools-capable _instruct_** model — calibration/restraint over
-size (`ORCHESTRATOR.md §5`), **not** a tool-happy coder model. `qwen3.5:4b` is already local
-(the verifier). Cross-family options already flagged as co-resident on 48 GB: gemma3 / phi4 /
-llama3.1. **Validate the ollama manifest size before pulling** — the verifier campaign found
-advertised sizes wrong (`qwen3-coder-next` was 48 GB, not ~16 GB; a claimed `qwen3-coder-14b`
+Want a **~4–14 B disciplined _instruct_** model — calibration/restraint over size
+(`ORCHESTRATOR.md §5`), **not** a tool-happy coder model. Note (per §8): for the M1 seat the
+model answers inline (`--no-tools`), so tool-calling is *not* the gate — calibration is; it
+only becomes load-bearing at M2 (agentic recon). `qwen3.5:4b` is already local (the verifier).
+The July-2026-verified candidate shortlist lives in `ORCHESTRATOR.md §8` (`gemma4:e4b-it` /
+`gemma4:12b-it`, `qwen3:8b` / `qwen3:14b`, `llama3.1:8b`). **Validate the ollama manifest size
+before pulling** — the verifier campaign found advertised sizes wrong (`qwen3-coder-next` was
+48 GB, not ~16 GB; a claimed `qwen3-coder-14b`
 tag did not exist).

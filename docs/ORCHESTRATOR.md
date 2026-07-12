@@ -178,20 +178,43 @@ Mirrors `VERIFIER.md` §Protocol:
 
 ## 8 · Candidate shortlist (validate, don't assume)
 
-Starting points only — the winner is whatever the campaign says, not this list. Want small,
-**disciplined tools-capable instruct** models that co-reside on 48 GB alongside the executor
-and the 4 B verifier:
+Starting points only — the winner is whatever the campaign says, not this list. Verified
+against the ollama registry in July 2026; re-check before pulling (sizes/tags drift, and the
+verifier campaign already caught the registry advertising wrong ones).
 
-- A **~4–14 B general instruct** model with strong function-calling and good
-  instruction-adherence (the restraint trait, §5.1) — the sweet spot.
-- **Cross-family lightweights already flagged as co-resident** in the verifier journal
-  (gemma3 / phi4 / llama3.1) — untested for this role, worth a focused sweep.
-- Explicitly **not** a tool-happy coder model (`qwen3-coder:30b` failed the reply-inline
-  discipline as a verifier; the orchestrator's agentic recon makes that worse, not better).
+**First, split the requirement by role — it changes what "capable enough" means:**
 
-> Validate sizes against the ollama manifest before pulling — the verifier campaign found the
-> shortlist's advertised sizes wrong (`qwen3-coder-next` was 48 GB, not ~16 GB; a claimed
-> `qwen3-coder-14b` tag does not exist). Do the same check here.
+- The **Layer-1 verifier** and the **orchestrator in milestone M1** both answer *inline* via
+  `orn … --no-tools` (a structured JSON verdict / a `done`·`retry`·`escalate` decision). They
+  make **no tool calls**, so function-calling ability is *not* the constraint for them —
+  calibration and instruction-adherence (§5.1) are. A weak tool-caller that is a disciplined
+  *instruct* model is perfectly admissible here.
+- Function-calling only becomes load-bearing at **M2**, where the orchestrator does *agentic*
+  grounding recon (Read / Grep / Bash). Weigh tool-calling reliability only for that milestone.
+
+So don't exclude a well-calibrated model just because its family is a weak tool-caller: test it
+for the inline roles first, and gate on tool-calling only when M2 lands.
+
+**Candidates that co-reside on 48 GB** alongside the executor (`ornith-1.0-9b`, ~9.5 GB) and
+the 4 B verifier (`qwen3.5:4b`, ~3.4 GB) — leaving ~35 GB — with their Q4 download sizes:
+
+| Model | Q4 size | Family tool-calling | Notes |
+|---|---|---|---|
+| `qwen3:8b` / `qwen3:14b` | 5.2 / 9.3 GB | strong (trained for it) | same family as the confirmed verifier; natural first pick + reference |
+| `gemma4:e4b-it` | 9.6 GB | reportedly weak (Gemma) — **test, don't assume** | latest-gen Gemma, effective-4 B footprint; strong *inline* candidate (verifier / M1) |
+| `gemma4:12b-it` | 7.6 GB | reportedly weak (Gemma) — **test, don't assume** | denser Gemma 4, still co-resident |
+| `llama3.1:8b` | ~4.9 GB | wide tool support | cross-family diversity; the M2-friendly option |
+
+Explicitly **not** a tool-happy coder model (`qwen3-coder:30b` failed the reply-inline
+discipline as a verifier; the orchestrator's M2 recon would only make that worse). `llama4` is
+MoE-only (16×17B / 128×17B) and does not co-reside — out of class. Gemma 4's `26b-a4b` (18 GB)
+and `31b` (20 GB) fit but abandon the "smallest calibrated" principle (§5); hold them as
+heavier references only.
+
+> Validate sizes/tags against the ollama registry before pulling — the verifier campaign found
+> advertised sizes wrong (`qwen3-coder-next` was 48 GB, not ~16 GB; a claimed `qwen3-coder-14b`
+> tag did not exist). And the "Gemma is a weak tool-caller" note above is a *reported* prior
+> from secondary sources, not a measured result — the campaign tests it, it does not trust it.
 
 ## 9 · Mapping onto the existing tooling (the skeleton)
 
