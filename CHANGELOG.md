@@ -66,6 +66,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cross-candidate comparison with ornith executed once. Rows tag `source:"corpus"`
   (`verify-report` includes them, `report` skips them). Corpus is gitignored/ephemeral.
   `run`/`verify-corpus` also accept `--results-dir <path>`.
+- Configurable local verifier: a user-level config (`~/.config/ornith-loop/config.json`,
+  honoring `XDG_CONFIG_HOME`) for the executor model, the Layer-1 local verifier (on/off +
+  model, **off by default** → Claude verifies inline), and the corrective-round budget.
+  New `orn config get|set|path`, and `orn verify --workdir <r> --test-cmd "<cmd>"` — a
+  mechanized read-only Layer-1 verify that reuses the evidence-packet machinery and prints
+  `pass`/`fail`/`uncertain`. `orn install-skill` now writes a default config and prints a
+  discoverable pointer (with detected Ollama models), plus a `--verifier <model>` one-shot
+  flag. `orn run` and `bench.mjs orchestrate` honor the config defaults. `gatherEvidence`
+  extracted to `src/evidence.js` (shared by the benchmark and `orn verify`). The `ornith-loop`
+  skill's steps 3–5 are now config-driven. Presidia unchanged: Layer-0 stays the anchor;
+  the verifier never sees a gold label.
 
 ### Changed
 - `docs/DESIGN.md`: the "no local reviewer model" non-goal is superseded by the two-tier
