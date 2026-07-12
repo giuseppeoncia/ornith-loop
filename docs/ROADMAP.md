@@ -18,7 +18,8 @@ there.
 | **Orchestrator** design (`ORCHESTRATOR.md`) | done |
 | Orchestrator **scoring skeleton** (`src/orchestrator.js`, `orchestrate-report`) | done, unit-tested |
 | Orchestrator **Phase-1 baseline** (Claude-in-seat, `journal/2026-07-12-orchestrator-selection.md`) | done — K=5 on T6+T4: pass@N 100%, effFS 0%; `orchestrate-report` validated |
-| Orchestrator **agentic execution driver** (`bench.mjs orchestrate`) | **not built** (honest stub) — track 2 |
+| Orchestrator **agentic execution driver** (`bench.mjs orchestrate`, M1) | **built + validated on real ollama** (2026-07-12) |
+| Orchestrator **candidate sweep** (`journal/2026-07-12-orchestrator-selection-2.md`) | **partial** — `qwen3:8b` complete (effFS 0; T4 Δ0, T6 −20% from one safe over-escalation); `gemma4:e4b` 3/5 on T6; rest pending (env killed long jobs — see resume plan) |
 
 All of the above is committed and pushed to
 `origin/claude/lightweight-orchestrator-analysis-v9m7kc`.
@@ -73,12 +74,16 @@ benchmark and verifier campaigns started (semi-manual before automation).
   Claude baseline.
 - **Detail / commands:** `benchmarks/README.md` → "Selecting a local orchestrator".
 
-### 2 · NEXT — build the agentic `orchestrate` execution driver
-The missing `bench.mjs orchestrate` command: put a candidate **local** model in the
-orchestrator seat and run it through the whole ornith-loop autonomously, emitting one scoring
-row per (task, repeat). This is what unlocks candidate evaluation at scale (K repeats over the
-suite). Spec: `ORCHESTRATOR.md §7` (protocol) and §9 (the row schema it must emit). Status:
-**not started** — needs iterative testing against ollama, hence the Mac.
+### 2 · IN PROGRESS — candidate sweep with the agentic `orchestrate` driver
+The `bench.mjs orchestrate` command (M1: fixed recon, candidate owns the per-round
+`done`/`retry`/`escalate` decision + corrective grounding) is **built, unit-tested, and
+validated on real ollama** (spec `docs/superpowers/specs/2026-07-12-orchestrate-driver-m1-design.md`;
+`ORCHESTRATOR.md §7`/§9). First candidate data (`journal/2026-07-12-orchestrator-selection-2.md`):
+**`qwen3:8b` complete** — effFS 0, matches Claude on T4, −20 % on T6 (one safe over-escalation);
+**`gemma4:e4b`** 3/5 on T6, promising. **Remaining:** finish `gemma4:e4b`, then `gemma4:12b` /
+`qwen3:14b` / `llama3.1:8b` (shortlist §8) — see the journal's **resume plan** for exact commands.
+Run where long jobs survive (background-task reaping, not sleep, blocked completion this session).
+Later: M2 = delegate the *agentic recon* (deterministic extractors + candidate selects, §6.2).
 
 ### 3 · PARALLEL — verifier follow-ups (independent of the orchestrator work)
 Already annotated in `journal/2026-07-10-verifier-selection.md` ("Recommended next steps" /
