@@ -239,13 +239,17 @@ semi-manually): `{ task, repeat, orchestratorModel, orchestratorOutcome: "done"|
 pass: <oracle gold label>, orchestratorRounds?, orchestratorReason? }`. Baseline rows use
 `orchestratorModel: "claude"`.
 
-**Not built (needs a real agent host, not this mechanical layer):** the driver that puts a
-candidate LOCAL model in the orchestrator seat and runs it through the whole ornith-loop
-(recon → minimal-scaffold prompt → `orn run` → verify → bounded corrective loop → journal),
-emitting one row per (task, repeat). `bench.mjs orchestrate` is the honest stub that documents
-this and points here. Until it lands, a Phase-1 pilot can be driven semi-manually (Claude in
-the seat for the baseline; the candidate for its rows) and scored with `orchestrate-report` —
-the same phasing `BENCHMARK.md` used.
+**Built (M1, 2026-07-12):** `bench.mjs orchestrate --task <id> --orchestrator-model <id>
+[--repeats N]` puts a candidate LOCAL model in the orchestrator seat and runs it through the
+loop (fixed round-1 recon → `orn run` executor → evidence → `qwen3.5:4b` verifier → the
+candidate's `done`/`retry`/`escalate` decision → bounded corrective rounds), emitting one row
+per (task, repeat). In M1 the recon is held fixed (round-1 grounding = the frozen
+`grounding.md`) so the pass@N delta isolates the *loop*, not grounding assembly. Results in
+§11. The Phase-1 Claude-in-seat baseline was driven semi-manually and scored the same way
+(`orchestratorModel: "claude"`), the phasing `BENCHMARK.md` used.
+
+**Not yet built — M2:** delegating the *agentic recon* itself (deterministic extractors +
+candidate selects what to send as round-1 grounding, §6.2).
 
 ## 10 · Success criteria for this experiment
 
@@ -260,3 +264,57 @@ the same phasing `BENCHMARK.md` used.
 - Re-runnable as new local models appear, suite and skill unchanged.
 
 Distil each campaign into `journal/YYYY-MM-DD-orchestrator-selection.md`.
+
+## 11 · Results — candidate sweep (2026-07-12, M1)
+
+The findings. Full narrative + per-candidate reading in
+[`../journal/2026-07-12-orchestrator-selection-2.md`](../journal/2026-07-12-orchestrator-selection-2.md)
+(and the Phase-1 baseline in `…-orchestrator-selection.md`); this section is the durable record
+of the numbers. Reproduce with `node benchmarks/bench.mjs orchestrate-report`.
+
+**Run matrix.** Host: Mac17,8, 48 GB unified memory; ollama 0.31.2 + pi 0.80.3, Node v24.16.0.
+Executor `ornith-1.0-9b-64k` `--thinking off` (exact build: `benchmarks/README.md` → "The
+executor model (exact build)"). Layer-1 verifier `qwen3.5:4b` (separate model, §4). Tasks
+`T6-inplace-hard` + `T4-additive-hard`; K=5 per (candidate, task), no pinned seed; corrective
+budget 3 rounds; M1 fixed recon. Five §8 candidates + the Claude baseline (n=10 each).
+
+```
+model                          n  autoPass  falseSucc  effFS  escalate
+claude                        10   100%      0%         0%     0%     (baseline)
+llama3.1:8b                   10   100%      0%         0%     0%
+qwen3:14b                     10   100%      0%         0%     0%
+gemma4:e4b                    10    90%      0%         0%    10%
+qwen3:8b                      10    90%      0%         0%    10%
+gemma4:12b                    10    80%      0%         0%    20%
+
+Per-task pass@N delta vs baseline 'claude' (passN = loop self-finished 'done' AND oracle PASS;
+                                            an escalate routes to Claude and is NOT a passN)
+task              model        passN  baseN  delta
+T4-additive-hard  gemma4:12b    60%    100%   -40%     (2/5 escalated: 1 correct-fail, 1 over-caution)
+T6-inplace-hard   gemma4:e4b    80%    100%   -20%     (1/5 escalated: correct-fail, caught corruption)
+T6-inplace-hard   qwen3:8b      80%    100%   -20%     (1/5 escalated: over-caution on a passing run)
+  …all other (candidate × task) cells: passN 100%, delta 0%
+```
+
+**The headline — `effectiveFalseSuccess = 0 % for every candidate.`** None of the five local
+models ever shipped a broken run as `done` (O1 safety bar met across the shortlist). Every
+negative delta is an escalation to the Claude audit tier, **not** a shipped failure — the two
+presidia (§4) held in every configuration. Two escalations were *correct refusals* of genuine
+failures (`gemma4:e4b` caught in-place `roundCents` structural corruption; `gemma4:12b` refused
+after exhausting the retry budget); two were *over-caution* on runs the oracle passed (the cheap
+error). Corrective loops recovered runs at rounds 2–3 for every model, with `done` reasons
+citing real evidence (test exit 0, in-scope files, `roundCents` intact).
+
+**Reading.** `llama3.1:8b` (~4.9 GB, the *smallest* tested) and `qwen3:14b` match Claude exactly
+(100 % autoPass, 0 escalate) — restraint + a working loop, not size, is what the M1 seat needs.
+`gemma4:e4b` and `qwen3:8b` are safe at 90 % autoPass (one escalation each). `gemma4:12b` is the
+weakest (80 %) and — notably — *more* cautious than the smaller `gemma4:e4b`: size did not buy
+calibration, echoing the verifier campaign's "calibration, not size" finding (`VERIFIER.md` →
+Results). **Ranking (all effFS 0):** `llama3.1:8b` ≈ `qwen3:14b` > `gemma4:e4b` ≈ `qwen3:8b` >
+`gemma4:12b`.
+
+**Caveats.** K=5 / no seed → ±~2-runs noise; the −20/−40 % deltas are 1–2 escalations, within
+noise, so the robust findings are the *ordering* and effFS=0, not exact rates. `passN` penalises
+correct refusals by construction (a caught failure scores as a non-pass) — read it as *autonomy
+vs Claude*, and `effFS` as *safety*. M1 held recon fixed; M2 (§6.2) will test whether a candidate
+can also assemble the grounding.

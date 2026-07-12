@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Benchmark results are now first-class in the canonical docs** (they are the project's
+  deliverable, not just journal notes): `docs/ORCHESTRATOR.md §11` records the complete M1
+  candidate sweep (5 models + Claude baseline, K=5 × T6/T4 — headline **effFS = 0 % for every
+  candidate**; `llama3.1:8b`/`qwen3:14b` match Claude), and `docs/VERIFIER.md` gains a Results
+  section with the K=5 → K=20 `qwen3.5:4b` selection (effFP = 0 %). Full per-repeat detail and
+  reading in the campaign journals.
+- **Exact executor build documented** — `benchmarks/README.md` → "The executor model (exact
+  build)": `ornith-1.0-9b-64k` is a local build of the `KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF`
+  (chat-template-fixed) GGUF plus a Modelfile (`top_p 0.95`, `num_ctx 65536`, `temperature 1`);
+  `docs/ROADMAP.md` and `docs/VERIFIER.md` run-matrix reference it.
 - `bench.mjs orchestrate --task <id> --orchestrator-model <id>` — the agentic driver that puts
   a candidate LOCAL model in the orchestrator seat (docs/ORCHESTRATOR.md). M1: recon is fixed
   (round-1 grounding = frozen `grounding.md`); the candidate owns only the per-round decision

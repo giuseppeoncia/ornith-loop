@@ -19,7 +19,7 @@ there.
 | Orchestrator **scoring skeleton** (`src/orchestrator.js`, `orchestrate-report`) | done, unit-tested |
 | Orchestrator **Phase-1 baseline** (Claude-in-seat, `journal/2026-07-12-orchestrator-selection.md`) | done — K=5 on T6+T4: pass@N 100%, effFS 0%; `orchestrate-report` validated |
 | Orchestrator **agentic execution driver** (`bench.mjs orchestrate`, M1) | **built + validated on real ollama** (2026-07-12) |
-| Orchestrator **candidate sweep** (`journal/2026-07-12-orchestrator-selection-2.md`) | **partial** — `qwen3:8b` complete (effFS 0; T4 Δ0, T6 −20% from one safe over-escalation); `gemma4:e4b` 3/5 on T6; rest pending (env killed long jobs — see resume plan) |
+| Orchestrator **candidate sweep** (`journal/2026-07-12-orchestrator-selection-2.md`, `ORCHESTRATOR.md §11`) | **done (M1)** — 5 candidates + Claude baseline, K=5 × T6/T4. **effFS = 0 % for all**; `llama3.1:8b` (~4.9 GB) and `qwen3:14b` match Claude exactly; `gemma4:12b` weakest (80% autoPass). Next: M2 agentic recon |
 
 All of the above is committed and pushed to
 `origin/claude/lightweight-orchestrator-analysis-v9m7kc`.
@@ -35,7 +35,10 @@ npm ci && npm test          # expect green (102 tests)
 
 Prerequisites (see `benchmarks/README.md` for detail):
 
-- **Ollama** running; models pulled (`ornith-1.0-9b-64k` executor, `qwen3.5:4b` verifier).
+- **Ollama** running; models pulled (`ornith-1.0-9b-64k` executor, `qwen3.5:4b` verifier). The
+  executor is a **local build**, not an upstream tag: the `KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF`
+  chat-template-fixed GGUF + a Modelfile (`top_p 0.95`, `num_ctx 65536`, `temperature 1`). Exact
+  build & provenance: `benchmarks/README.md` → "The executor model (exact build)".
 - **`pi`** on `PATH` (or `ORN_PI_BIN=/path/to/pi`); the `ollama` provider registered in
   `~/.pi/agent/models.json`; **Node ≥ 24**.
 - Sanity check before anything: `orn run "say hi" --timeout 60` should write a run record.
@@ -74,16 +77,19 @@ benchmark and verifier campaigns started (semi-manual before automation).
   Claude baseline.
 - **Detail / commands:** `benchmarks/README.md` → "Selecting a local orchestrator".
 
-### 2 · IN PROGRESS — candidate sweep with the agentic `orchestrate` driver
+### 2 · DONE (M1) — candidate sweep with the agentic `orchestrate` driver
 The `bench.mjs orchestrate` command (M1: fixed recon, candidate owns the per-round
-`done`/`retry`/`escalate` decision + corrective grounding) is **built, unit-tested, and
-validated on real ollama** (spec `docs/superpowers/specs/2026-07-12-orchestrate-driver-m1-design.md`;
-`ORCHESTRATOR.md §7`/§9). First candidate data (`journal/2026-07-12-orchestrator-selection-2.md`):
-**`qwen3:8b` complete** — effFS 0, matches Claude on T4, −20 % on T6 (one safe over-escalation);
-**`gemma4:e4b`** 3/5 on T6, promising. **Remaining:** finish `gemma4:e4b`, then `gemma4:12b` /
-`qwen3:14b` / `llama3.1:8b` (shortlist §8) — see the journal's **resume plan** for exact commands.
-Run where long jobs survive (background-task reaping, not sleep, blocked completion this session).
-Later: M2 = delegate the *agentic recon* (deterministic extractors + candidate selects, §6.2).
+`done`/`retry`/`escalate` decision + corrective grounding) is **built, unit-tested, and run to
+completion on real ollama** (spec `docs/superpowers/specs/2026-07-12-orchestrate-driver-m1-design.md`;
+`ORCHESTRATOR.md §7`/§9/§11). **Full sweep done 2026-07-12** — 5 §8 candidates + the Claude
+baseline, K=5 × {T6-inplace-hard, T4-additive-hard}. Results (`ORCHESTRATOR.md §11`,
+`journal/2026-07-12-orchestrator-selection-2.md`): **`effectiveFalseSuccess = 0 % for every
+candidate`** — none shipped a broken run. `llama3.1:8b` (~4.9 GB, smallest) and `qwen3:14b` match
+Claude exactly (100 % autoPass, 0 escalate); `gemma4:e4b`/`qwen3:8b` safe at 90 %; `gemma4:12b`
+weakest at 80 % (more cautious than the smaller e4b — calibration, not size). Sweep durability
+solved by daemonizing (`setsid` + `caffeinate`, own process group) so the reaping that killed the
+partial run couldn't reach it.
+**Next: M2** — delegate the *agentic recon* (deterministic extractors + candidate selects, §6.2).
 
 ### 3 · PARALLEL — verifier follow-ups (independent of the orchestrator work)
 Already annotated in `journal/2026-07-10-verifier-selection.md` ("Recommended next steps" /

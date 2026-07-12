@@ -18,6 +18,31 @@ model. That means you need, on your own workstation:
 Sanity check before benchmarking: `orn run "say hi" --timeout 60` should produce a run
 record. If that works, the driver will.
 
+### The executor model (exact build)
+
+Every result in this repo was produced with a **specific** ornith build; reproduction depends
+on matching it. The `ornith-1.0-9b-64k` tag is **not** an upstream ollama model — it is built
+locally from:
+
+- **Source GGUF:** [`KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF`](https://huggingface.co/KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF)
+  (~9.5 GB). "fixed" = it patches a bug in the **chat template** baked into the GGUF metadata;
+  the stock ornith GGUF's template is broken. (Verified: the `ornith-1.0-9b-64k` and
+  `hf.co/KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF` tags resolve to the **same** blob
+  `sha256-ddacff58…`, so the tag derives directly from this GGUF.)
+- **Modelfile** (the `-64k` tag = this source plus these three parameters):
+
+  ```
+  FROM hf.co/KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF:latest
+  PARAMETER top_p 0.95
+  PARAMETER num_ctx 65536
+  PARAMETER temperature 1
+  ```
+
+  `num_ctx 65536` is the 64 K context the tag name refers to. Build it with
+  `ollama create ornith-1.0-9b-64k -f Modelfile`. `orn`/`bench.mjs` also pass `--thinking off`
+  (required — see the root `CLAUDE.md`); the chat template itself lives in the GGUF, not the
+  Modelfile (`ollama show ornith-1.0-9b-64k --template` prints the patched Qwen-style Jinja).
+
 ## What the driver does (and doesn't)
 
 `bench.mjs` owns only the **mechanical, reproducible** layer:

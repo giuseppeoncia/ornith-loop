@@ -82,6 +82,92 @@ them, sorted safest-first.
    an unparseable reply → silent `uncertain`, which confounds the escalation rate. (Regression
    found and fixed 2026-07-10; see the journal.)
 
+## Results — the `qwen3.5:4b` selection (2026-07-10 → 2026-07-11)
+
+The findings that answer V1. Full narrative, harness-bug writeup, and lessons in
+[`../journal/2026-07-10-verifier-selection.md`](../journal/2026-07-10-verifier-selection.md);
+this section is the durable record of the numbers. Reproduce the rollup any time with
+`node benchmarks/bench.mjs verify-report`.
+
+**Run matrix.** Host: Apple M-series, 48 GB unified memory, ollama + pi 0.80.3. Executor
+(the runs being judged): `ornith-1.0-9b-64k`, `--thinking off` — the exact local build (KikoCis
+chat-template-fixed GGUF + `top_p 0.95` / `num_ctx 65536` / `temperature 1`) described in
+`benchmarks/README.md` → "The executor model (exact build)". Tasks: `T6-inplace-hard`,
+`T3-inplace` — the in-place edit modes, where a lazy verifier most easily false-passes a
+green-but-corrupt diff. Arm A only. Gold label = the Layer-0 oracle; verifier verdict =
+the prediction scored against it.
+
+### First pass — K=5, three candidates (26 rows)
+
+```
+model                          n  agree  falsePass  effFP  escalate
+qwen3.5:4b                    10   89%      0%       0%     30%
+qwen3.6-35b-a3b-64k            6  100%      0%       0%     33%   (reference ceiling; T6 full, T3 k1 only)
+qwen3-coder:30b               10   67%      0%       0%     80%   (escalation inflated by a harness bug, see below)
+```
+
+Per-row detail (oracle gold → verifier verdict; `*` = unparseable reply forced to `uncertain`):
+
+```
+T3-inplace  qwen3.5:4b       k1 fail→fail   k2 PASS→pass        k3 PASS→pass        k4 PASS→pass   k5 PASS→pass
+T6-hard     qwen3.5:4b       k1 PASS→uncert* k2 PASS→fail       k3 PASS→pass        k4 PASS→pass   k5 PASS→pass
+T3-inplace  qwen3-coder:30b  k1 fail→uncert* k2 PASS→uncert*    k3 PASS→uncert*     k4 PASS→pass   k5 PASS→pass
+T6-hard     qwen3-coder:30b  k1 PASS→uncert* k2 PASS→uncert*    k3 PASS→uncert*     k4 PASS→fail   k5 PASS→uncert*
+T3-inplace  qwen3.6-35b      k1 PASS→pass
+T6-hard     qwen3.6-35b      k1 fail→fail   k2 fail→fail(CHANGED) k3 PASS→pass       k4 PASS→pass   k5 PASS→pass
+```
+
+- **All three hit `effFP = 0%`** — nobody green-lit a real failure, so V1 ("a lightweight
+  local model can be a safe first pass") is answered **yes** on this suite even at the 3.4 GB
+  floor. The discriminator is escalation cost, and `qwen3.5:4b` is both lightest and cheapest
+  (30%) while safe → it wins by the selection rule.
+- `qwen3-coder:30b`'s 80% escalation is **mostly a harness artifact**: 6 of its 7 `uncertain`s
+  were unparseable replies (it wrote its verdict to a *file* rather than answering inline —
+  the pre-`--no-tools` bug). When it did answer inline it judged correctly. Its true safety is
+  unmeasured here; do not read "bigger = more cautious" from this row.
+- Load-bearing caveat at K=5: the harness re-ran ornith per candidate, so the one **green-but-
+  corrupt diff** (oracle `fail` *with* files changed — the mode the protocol targets) occurred
+  only in the ceiling's T6 k2, which caught it. The two light models never met that case — all
+  their oracle-`fail` runs were trivial (no-op / timeout). So the 4b's effFP=0 was **real but
+  under-tested on the mode that matters most** → provisional adopt.
+
+### Confirmation — K=20 on the fixed harness (40 rows)
+
+Two fixes landed first: the verifier now runs **read-only** (`orn run --no-tools`, commit
+`ce04daf`) so it can no longer write files and must reply inline; and `bench.mjs run`
+**auto-caffeinates** on macOS (commit `474c886`) after an idle-sleep truncated 4 in-flight
+runs. Then `qwen3.5:4b` was re-run at K=20 on `T6-inplace-hard` + `T3-inplace`:
+
+```
+model         n  agree  falsePass  effFP  escalate
+qwen3.5:4b   40  100%     0%         0%     25%
+```
+
+Partitioned to separate genuine runs from the quarantined sleep artifacts:
+
+| subset | n | effFP | escalation | confusion |
+|---|---|---|---|---|
+| **clean (genuine runs)** | 36 | **0%** | **17%** | truePass 30 · trueFail 4 · uncertain 2 · **falsePass 0** |
+| sleep artifacts | 4 | 0% | 100% | all `oracle=fail` interrupted runs, all correctly `fail` |
+| all | 40 | 0% | 25% | falsePass 0 · agreement 100% on decided verdicts |
+
+**The mode that matters — genuine green-but-corrupt in-place diffs** (`exit completed`,
+`oracle=fail`, files changed): 4 occurred (T6 k3/k16/k20, T3 k8). **Zero false-passed** — 3
+called `fail`, 1 escalated `uncertain` (the safe outcome: routes to the Claude audit tier
+rather than rubber-stamping). This is exactly the evidence K=5 lacked.
+
+### Verdict: **confirmed** (on this suite)
+
+`qwen3.5:4b` is adopted as the Layer-1 first-pass verifier. effFP = 0 held at K=20 including
+on the corrupt-but-green failure mode; its clean escalation is ~17%, cheap. **A 3.4 GB general
+model is a safe auto-accept gate — size is not the lever, calibration is.**
+
+**Caveats still open:** only the 4b was re-executed at K=20, so the per-candidate
+re-execution *unfairness* vs the 30b/ceiling is not yet removed (needs the
+`--save-corpus` / `verify-corpus` decoupled flow, now implemented — §Protocol step 5); and
+cross-family lightweight verifiers (`gemma4:e4b-it`, `qwen3:8b`, `llama3.1:8b`) remain
+untested as verifiers. K=5/K=20 carry the usual ±2-runs noise.
+
 ## Production use: `orn config` / `orn verify`
 
 The protocol above is the **selection** harness — `bench.mjs run --verifier-model` +
