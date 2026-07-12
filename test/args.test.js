@@ -68,3 +68,12 @@ test("run parsing still works after dispatch refactor", () => {
   assert.equal(options.prompt, "make a file");
   assert.equal(options.label, "x");
 });
+
+test("config: get/set/path parse", () => {
+  assert.deepEqual(parseArgs(["config", "path"]).options, { command: "config", action: "path" });
+  assert.deepEqual(parseArgs(["config", "get", "verifier.model"]).options, { command: "config", action: "get", key: "verifier.model" });
+  assert.deepEqual(parseArgs(["config", "get"]).options, { command: "config", action: "get", key: null });
+  assert.deepEqual(parseArgs(["config", "set", "verifier.enabled", "true"]).options, { command: "config", action: "set", key: "verifier.enabled", value: "true" });
+  assert.match(parseArgs(["config", "set", "onlykey"]).error, /needs <key> <value>/);
+  assert.match(parseArgs(["config", "bogus"]).error, /get.*set.*path/);
+});

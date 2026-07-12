@@ -60,6 +60,20 @@ test("orn --help exits 0 with usage", async () => {
   assert.match(stdout, /orn run/);
 });
 
+test("orn config: set then get round-trips via XDG_CONFIG_HOME", async () => {
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  try {
+    const env = { ...process.env, XDG_CONFIG_HOME: cfgHome };
+    await pexec(process.execPath, [orn, "config", "set", "verifier.model", "gemma3:4b"], { env });
+    const { stdout } = await pexec(process.execPath, [orn, "config", "get", "verifier.model"], { env });
+    assert.match(stdout, /gemma3:4b/);
+    const path = await pexec(process.execPath, [orn, "config", "path"], { env });
+    assert.match(path.stdout, /ornith-loop\/config\.json/);
+  } finally {
+    await rm(cfgHome, { recursive: true, force: true });
+  }
+});
+
 test("orn install-skill --target claude: symlinks into CLAUDE_SKILLS_DIR", async () => {
   const skills = await mkdtemp(join(tmpdir(), "orn-skills-"));
   try {

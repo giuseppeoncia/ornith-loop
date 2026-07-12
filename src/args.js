@@ -11,6 +11,7 @@ export function parseArgs(argv) {
   if (!command || command === "-h" || command === "--help") return { help: true };
   if (command === "run") return parseRun(argv.slice(1));
   if (command === "install-skill") return parseInstall(argv.slice(1));
+  if (command === "config") return parseConfig(argv.slice(1));
   return { error: `unknown command '${command}': expected 'run' or 'install-skill'` };
 }
 
@@ -78,11 +79,24 @@ function parseInstall(args) {
   return { options: opts };
 }
 
+function parseConfig(args) {
+  const sub = args[0];
+  if (sub === "-h" || sub === "--help") return { help: true };
+  if (sub === "path") return { options: { command: "config", action: "path" } };
+  if (sub === "get") return { options: { command: "config", action: "get", key: args[1] ?? null } };
+  if (sub === "set") {
+    if (args.length < 3) return { error: "config set needs <key> <value>" };
+    return { options: { command: "config", action: "set", key: args[1], value: args[2] } };
+  }
+  return { error: "config: expected 'get', 'set', or 'path'" };
+}
+
 export const HELP = `orn <command> [options]
 
 Commands:
   run <prompt>       drive a self-scaffolding local model via pi, capturing a run record
   install-skill      install the ornith-loop skill into your coding agent(s)
+  config <get|set|path>   read/write ~/.config/ornith-loop/config.json (verifier, executor, rounds)
 
 orn run <prompt> [options]
   --prompt-file <path>   read the prompt from a file (instead of a positional)
