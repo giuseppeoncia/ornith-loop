@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Orchestrator M2 results** (`docs/ORCHESTRATOR.md §11.2`,
+  `journal/2026-07-13-orchestrator-selection-3.md`): first empirical run of `orchestrate --recon
+  candidate` (llama3.1:8b, qwen3:14b, gemma4:12b, K=5 × T6/T4). Headline — **effFS = 0 % for every
+  candidate again**: delegating round-1 recon to the candidate lowers autonomy ~20 pp (heaviest on
+  T4-additive, where the dropped fact is scope) but never breaches safety. Full per-repeat detail,
+  recon-delegation deltas vs own-M1, and the grounding-quality analysis in the journal.
+
 ## [0.5.0] - 2026-07-13
 
 ### Added

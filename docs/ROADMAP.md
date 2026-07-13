@@ -19,7 +19,8 @@ there.
 | Orchestrator **scoring skeleton** (`src/orchestrator.js`, `orchestrate-report`) | done, unit-tested |
 | Orchestrator **Phase-1 baseline** (Claude-in-seat, `journal/2026-07-12-orchestrator-selection.md`) | done — K=5 on T6+T4: pass@N 100%, effFS 0%; `orchestrate-report` validated |
 | Orchestrator **agentic execution driver** (`bench.mjs orchestrate`, M1) | **built + validated on real ollama** (2026-07-12) |
-| Orchestrator **candidate sweep** (`journal/2026-07-12-orchestrator-selection-2.md`, `ORCHESTRATOR.md §11`) | **done (M1)** — 5 candidates + Claude baseline, K=5 × T6/T4. **effFS = 0 % for all**; `llama3.1:8b` (~4.9 GB) and `qwen3:14b` match Claude exactly; `gemma4:12b` weakest (80% autoPass). Next: M2 agentic recon |
+| Orchestrator **candidate sweep — M1 (fixed recon)** (`journal/2026-07-12-orchestrator-selection-2.md`, `ORCHESTRATOR.md §11.1`) | **done** — 5 candidates + Claude baseline, K=5 × T6/T4. **effFS = 0 % for all**; `llama3.1:8b` (~4.9 GB) and `qwen3:14b` match Claude exactly; `gemma4:12b` weakest (80% autoPass) |
+| Orchestrator **candidate sweep — M2 (delegated recon)** (`journal/2026-07-13-orchestrator-selection-3.md`, `ORCHESTRATOR.md §11.2`) | **done** — llama3.1:8b/qwen3:14b/gemma4:12b, K=5 × T6/T4, candidate assembles round-1 grounding. **effFS = 0 % for all**; delegating recon costs ~20 pp autonomy (heaviest on T4-additive: scope fact dropped), safety intact. Pending: Claude-M2 ceiling (semi-manual); next M3 = agentic Read/Grep/Bash recon |
 
 All of the above is committed and pushed to
 `origin/claude/lightweight-orchestrator-analysis-v9m7kc`.
@@ -77,19 +78,24 @@ benchmark and verifier campaigns started (semi-manual before automation).
   Claude baseline.
 - **Detail / commands:** `benchmarks/README.md` → "Selecting a local orchestrator".
 
-### 2 · DONE (M1) — candidate sweep with the agentic `orchestrate` driver
-The `bench.mjs orchestrate` command (M1: fixed recon, candidate owns the per-round
-`done`/`retry`/`escalate` decision + corrective grounding) is **built, unit-tested, and run to
-completion on real ollama** (spec `docs/superpowers/specs/2026-07-12-orchestrate-driver-m1-design.md`;
-`ORCHESTRATOR.md §7`/§9/§11). **Full sweep done 2026-07-12** — 5 §8 candidates + the Claude
-baseline, K=5 × {T6-inplace-hard, T4-additive-hard}. Results (`ORCHESTRATOR.md §11`,
-`journal/2026-07-12-orchestrator-selection-2.md`): **`effectiveFalseSuccess = 0 % for every
-candidate`** — none shipped a broken run. `llama3.1:8b` (~4.9 GB, smallest) and `qwen3:14b` match
-Claude exactly (100 % autoPass, 0 escalate); `gemma4:e4b`/`qwen3:8b` safe at 90 %; `gemma4:12b`
-weakest at 80 % (more cautious than the smaller e4b — calibration, not size). Sweep durability
-solved by daemonizing (`setsid` + `caffeinate`, own process group) so the reaping that killed the
-partial run couldn't reach it.
-**Next: M2** — delegate the *agentic recon* (deterministic extractors + candidate selects, §6.2).
+### 2 · DONE (M1 + M2) — candidate sweeps with the agentic `orchestrate` driver
+**M1 (fixed recon, 2026-07-12):** 5 §8 candidates + the Claude baseline, K=5 × {T6, T4}.
+**`effFS = 0 % for every candidate`**; `llama3.1:8b` (~4.9 GB) and `qwen3:14b` match Claude
+exactly (100 % autoPass); `gemma4:e4b`/`qwen3:8b` 90 %; `gemma4:12b` 80 % (calibration, not size).
+(`ORCHESTRATOR.md §11.1`, `journal/2026-07-12-orchestrator-selection-2.md`.)
+
+**M2 (delegated recon, 2026-07-13, shipped in 0.5.0):** `--recon candidate` — the candidate
+assembles its own round-1 grounding from a deterministic fact-pool, then the M1 loop runs. Ran
+llama3.1:8b/qwen3:14b/gemma4:12b, K=5 × {T6, T4}. **`effFS = 0 % again for all`** — delegating
+recon **lowers autonomy ~20 pp** (heaviest on T4-additive, where the dropped fact is scope: e.g.
+llama omitted registering `pow` in `registry.mjs` → honest fail → safe escalate) but **never
+breaches safety**. Ordering preserved but compressed. (`ORCHESTRATOR.md §11.2`,
+`journal/2026-07-13-orchestrator-selection-3.md`.) Durability held even through a **power cut**
+(laptop ran on battery; daemon in its own session survived).
+
+**Next:** (1) semi-manual **Claude-M2 ceiling** (assembly upper bound); (2) tighten
+`parseGrounding`/rubric for the `{grounding}`-array quirk; (3) **M3** — candidate drives *agentic*
+recon (Read/Grep/Bash), where function-calling finally becomes load-bearing (§6.2).
 
 ### 3 · PARALLEL — verifier follow-ups (independent of the orchestrator work)
 Already annotated in `journal/2026-07-10-verifier-selection.md` ("Recommended next steps" /

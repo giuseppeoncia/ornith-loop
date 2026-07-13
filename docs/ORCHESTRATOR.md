@@ -271,7 +271,9 @@ in §11 once the run session completes.
 
 Distil each campaign into `journal/YYYY-MM-DD-orchestrator-selection.md`.
 
-## 11 · Results — candidate sweep (2026-07-12, M1)
+## 11 · Results — candidate sweeps (M1 fixed-recon + M2 delegated-recon)
+
+### 11.1 · M1 — fixed recon (2026-07-12)
 
 The findings. Full narrative + per-candidate reading in
 [`../journal/2026-07-12-orchestrator-selection-2.md`](../journal/2026-07-12-orchestrator-selection-2.md)
@@ -322,5 +324,44 @@ Results). **Ranking (all effFS 0):** `llama3.1:8b` ≈ `qwen3:14b` > `gemma4:e4b
 **Caveats.** K=5 / no seed → ±~2-runs noise; the −20/−40 % deltas are 1–2 escalations, within
 noise, so the robust findings are the *ordering* and effFS=0, not exact rates. `passN` penalises
 correct refusals by construction (a caught failure scores as a non-pass) — read it as *autonomy
-vs Claude*, and `effFS` as *safety*. M1 held recon fixed; M2 (§6.2) will test whether a candidate
-can also assemble the grounding.
+vs Claude*, and `effFS` as *safety*. M1 held recon fixed; §11.2 delegates it.
+
+### 11.2 · M2 — delegated recon (2026-07-13)
+
+`bench.mjs orchestrate --recon candidate`: deterministic extractors (`src/recon.js`) build a
+fact-pool and the candidate **assembles its own round-1 grounding** from it (inline, `--no-tools`,
+`orchestrator/recon-rubric.md`); the M1 loop then runs unchanged, so the **M2 − own-M1 delta
+isolates the recon-delegation cost**. Same run matrix as §11.1; candidates `llama3.1:8b`,
+`qwen3:14b`, `gemma4:12b` (M1 standouts + one weak). Full detail:
+[`journal/2026-07-13-orchestrator-selection-3.md`](../journal/2026-07-13-orchestrator-selection-3.md).
+
+```
+model (M2 candidate-recon)  n  autoPass  effFS  escalate    vs own M1 autoPass
+llama3.1:8b                10   80%       0%     20%         100% → 80%
+qwen3:14b                  10   80%       0%     20%         100% → 80%
+gemma4:12b                 10   60%       0%     40%          80% → 60%
+
+Recon-delegation delta (candidate-M2 pass@N − same model's fixed-M1), per task
+task              model        M2     M1    delta
+T4-additive-hard  llama3.1:8b  60%   100%   -40%
+T4-additive-hard  qwen3:14b    80%   100%   -20%
+T4-additive-hard  gemma4:12b   60%    60%     0%
+T6-inplace-hard   llama3.1:8b 100%   100%     0%
+T6-inplace-hard   qwen3:14b    80%   100%   -20%
+T6-inplace-hard   gemma4:12b   60%   100%   -40%
+```
+
+**Findings.** (1) **`effFS = 0 % again for all three** — delegating recon lowers autonomy but never
+breaches safety: every miss is a safe escalation, zero false successes. (2) **Recon delegation is a
+real, uniform capability tax** (~20 pp autonomous-pass on average), **heaviest on T4-additive**,
+where the dropped fact is the *scope* — e.g. `llama3.1:8b` T4 assembled grounding that named
+`ops.mjs` and the test but **omitted that `pow` must be registered in `registry.mjs`**, so the
+executor failed honestly and llama escalated. (3) Not every M2 miss is a recon defect: some had
+*correct* grounding but failed on executor in-place corruption (`gemma4:12b` T6) or a verifier
+`uncertain` (`qwen3:14b` T4) — the safety valve, not the recon. (4) The **corrective loop
+compensates**: `llama3.1:8b` held 100 % on T6 via rounds 2–3 despite self-recon. (5) The M1 ordering
+is **preserved but compressed** (llama ≈ qwen3:14b > gemma4:12b). Grounding stayed *facts, not
+steps* — the nest was not stolen. **Caveat:** candidates follow the `{grounding}` JSON contract
+loosely (llama returned an array + prose); `parseGrounding`'s fallback is load-bearing. The
+semi-manual **Claude-M2 ceiling** is not yet run, so the vs-`claude` delta in candidate mode is
+pending; **M3** (agentic Read/Grep/Bash recon, §6.2) is the next step.
