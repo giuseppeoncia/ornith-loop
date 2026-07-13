@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2026-07-13
 
 ### Added
+- **Orchestrator M2 — delegated recon** (`bench.mjs orchestrate --recon candidate`): the
+  candidate assembles its own round-1 grounding from a deterministic fact-pool built by
+  `src/recon.js` (test command, file tree, `package.json`, goal-token grep hits + hit-file
+  source; task answer-keys excluded) via `orchestrator/recon-rubric.md` (facts, never steps),
+  then runs the unchanged M1 loop. New `bench.mjs recon --task <id>` prints the fact-pool.
+  Rows tag `reconMode: fixed|candidate` (default `fixed`, back-compat); `orchestrate-report`
+  partitions by mode and adds the candidate-M2-vs-own-M1 recon-delegation delta. Dry-runnable
+  via the `fake-pi` `# RECON ASSEMBLY` role.
 - **Benchmark results are now first-class in the canonical docs** (they are the project's
   deliverable, not just journal notes): `docs/ORCHESTRATOR.md §11` records the complete M1
   candidate sweep (5 models + Claude baseline, K=5 × T6/T4 — headline **effFS = 0 % for every
