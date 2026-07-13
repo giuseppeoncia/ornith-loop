@@ -88,7 +88,7 @@ verification → bounded corrective loop (default 3) → journal.
 Check which skill version is bundled vs installed:
 
 ```bash
-orn skill-version   # bundled: 0.3.0 / claude: 0.3.0 / opencode: not installed
+orn skill-version   # bundled: 0.4.0 / claude: 0.4.0 / opencode: not installed
 ```
 
 ### Configurable local verifier (optional)

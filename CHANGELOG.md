@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-07-13
-
 ### Added
 - **`orn skill-version`** — prints the bundled `ornith-loop` skill version (a new `version:`
   field in `SKILL.md` frontmatter, kept in sync with `package.json` — a test enforces it) plus
@@ -22,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Rows tag `reconMode: fixed|candidate` (default `fixed`, back-compat); `orchestrate-report`
   partitions by mode and adds the candidate-M2-vs-own-M1 recon-delegation delta. Dry-runnable
   via the `fake-pi` `# RECON ASSEMBLY` role.
+
+## [0.4.0] - 2026-07-13
+
+### Added
 - **Benchmark results are now first-class in the canonical docs** (they are the project's
   deliverable, not just journal notes): `docs/ORCHESTRATOR.md §11` records the complete M1
   candidate sweep (5 models + Claude baseline, K=5 × T6/T4 — headline **effFS = 0 % for every
