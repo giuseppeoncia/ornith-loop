@@ -32,6 +32,11 @@ test("--prompt-file sets promptFile and leaves prompt empty", () => {
   assert.equal(options.prompt, "");
 });
 
+test("--no-tools sets noTools; default is false", () => {
+  assert.equal(parseArgs(["run", "hi"]).options.noTools, false);
+  assert.equal(parseArgs(["run", "hi", "--no-tools"]).options.noTools, true);
+});
+
 test("errors: no prompt, both prompt sources, bad thinking, bad timeout, missing command", () => {
   assert.match(parseArgs(["run"]).error, /prompt/i);
   assert.match(parseArgs(["run", "hi", "--prompt-file", "p.md"]).error, /both/i);
@@ -62,4 +67,28 @@ test("run parsing still works after dispatch refactor", () => {
   assert.equal(options.command, "run");
   assert.equal(options.prompt, "make a file");
   assert.equal(options.label, "x");
+});
+
+test("verify: required workdir + test-cmd, optional model/goal/grounding", () => {
+  const { options } = parseArgs(["verify", "--workdir", "/r", "--test-cmd", "node --test", "--model", "qwen3.5:4b"]);
+  assert.equal(options.command, "verify");
+  assert.equal(options.workdir, "/r");
+  assert.equal(options.testCmd, "node --test");
+  assert.equal(options.model, "qwen3.5:4b");
+  assert.match(parseArgs(["verify", "--test-cmd", "node --test"]).error, /workdir/);
+  assert.match(parseArgs(["verify", "--workdir", "/r"]).error, /test-cmd/);
+});
+
+test("config: get/set/path parse", () => {
+  assert.deepEqual(parseArgs(["config", "path"]).options, { command: "config", action: "path" });
+  assert.deepEqual(parseArgs(["config", "get", "verifier.model"]).options, { command: "config", action: "get", key: "verifier.model" });
+  assert.deepEqual(parseArgs(["config", "get"]).options, { command: "config", action: "get", key: null });
+  assert.deepEqual(parseArgs(["config", "set", "verifier.enabled", "true"]).options, { command: "config", action: "set", key: "verifier.enabled", value: "true" });
+  assert.match(parseArgs(["config", "set", "onlykey"]).error, /needs <key> <value>/);
+  assert.match(parseArgs(["config", "bogus"]).error, /get.*set.*path/);
+});
+
+test("run: modelExplicit is false by default, true when --model given", () => {
+  assert.equal(parseArgs(["run", "hi"]).options.modelExplicit, false);
+  assert.equal(parseArgs(["run", "hi", "--model", "x"]).options.modelExplicit, true);
 });

@@ -1,8 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas } from "../src/bench.js";
+import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
 
 const PARTS = { goal: "GOAL", grounding: "GROUND", scaffold: "SCAFFOLD" };
+
+test("caffeinateArgs: darwin gets an idle-sleep assertion bound to our pid; other platforms opt out", () => {
+  assert.deepEqual(caffeinateArgs("darwin", 4242), ["-i", "-m", "-s", "-w", "4242"]);
+  assert.equal(caffeinateArgs("linux", 4242), null);
+  assert.equal(caffeinateArgs("win32", 1), null);
+});
 
 test("arms: A and B2 differ only by the scaffold part; A and B3 only by loop", () => {
   assert.deepEqual(ARMS.A.parts, ["goal", "grounding"]);
@@ -59,4 +65,17 @@ test("deltas: H1/H2/H3 use passN for looped arms and pass1 for single-shot", () 
   assert.equal(d["H2_A_minus_B1"], 1); // 1 - 0
   assert.equal(d["H1_A_minus_B2"], 0); // 1 - 1
   assert.equal(d["H3_A_minus_B3"], 1); // 1 - 0
+});
+
+test("aggregate: ignores verifier-replay rows tagged source:corpus", () => {
+  const rows = [
+    { task: "T", arm: "A", repeat: 1, round: 1, pass: true, flags: {} },              // executor attempt
+    { task: "T", arm: "A", repeat: 1, round: 1, pass: false, source: "corpus",         // replay row — must be ignored
+      verifierModel: "m", verifierVerdict: "pass" },
+  ];
+  const rep = aggregate(rows);
+  assert.equal(rep.length, 1);
+  assert.equal(rep[0].repeats, 1);      // only the one executor repeat
+  assert.equal(rep[0].pass1Rate, 1);    // corpus row (pass:false) did not drag it down
+  assert.equal(rep[0].attempts, 1);     // corpus row is not counted as an attempt
 });

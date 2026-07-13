@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-13
+
+### Added
+- **Benchmark results are now first-class in the canonical docs** (they are the project's
+  deliverable, not just journal notes): `docs/ORCHESTRATOR.md §11` records the complete M1
+  candidate sweep (5 models + Claude baseline, K=5 × T6/T4 — headline **effFS = 0 % for every
+  candidate**; `llama3.1:8b`/`qwen3:14b` match Claude), and `docs/VERIFIER.md` gains a Results
+  section with the K=5 → K=20 `qwen3.5:4b` selection (effFP = 0 %). Full per-repeat detail and
+  reading in the campaign journals.
+- **Exact executor build documented, prominently.** The main `README.md` → "The ornith model
+  (use the exact build)" now states that a stock ornith GGUF has a broken chat template and that
+  the project requires `ornith-1.0-9b-64k`, a local build of the
+  `KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF` (chat-template-fixed) GGUF plus a Modelfile
+  (`top_p 0.95`, `num_ctx 65536`, `temperature 1`), with the `ollama create` command. Full
+  provenance + blob-match verification in `benchmarks/README.md` → "The executor model (exact
+  build)"; `docs/ROADMAP.md` and `docs/VERIFIER.md` run-matrix reference it.
+- `bench.mjs orchestrate --task <id> --orchestrator-model <id>` — the agentic driver that puts
+  a candidate LOCAL model in the orchestrator seat (docs/ORCHESTRATOR.md). M1: recon is fixed
+  (round-1 grounding = frozen `grounding.md`); the candidate owns only the per-round decision
+  (`done`/`retry`/`escalate`, `src/orchestrator.js` `parseRoundDecision`) and the corrective
+  grounding fact on a retry. Layer-0 oracle scores post-hoc (never shown to the candidate); the
+  Layer-1 verifier (default `qwen3.5:4b`) stays a separate model. New `orchestrator/rubric.md`.
+  Rows feed the existing `orchestrate-report`. Dry-runnable via the `fake-pi` fixture.
+- Consolidated **roadmap + session handoff** (`docs/ROADMAP.md`) and an "Selecting a local
+  orchestrator" runbook section in `benchmarks/README.md`: a single "start here" for resuming
+  on the local ollama workstation (Mac), with the branch/prereq/sanity-check resume steps, a
+  paste-ready kickoff prompt, and the three tracks that were previously scattered across
+  journal entries and doc sections pulled into one prioritized list — (1) the semi-manual
+  orchestrator pilot, (2) building the agentic `orchestrate` execution driver, (3) the open
+  verifier follow-ups (decouple executions, cross-family sweep, shortlist-size fix). The
+  runbook documents the `results/*.jsonl` row schema and the `effFS` selection metric. Root
+  `README.md` gains a one-line pointer.
+- Orchestrator-selection **scoring skeleton** (`src/orchestrator.js`, unit-tested in
+  `test/orchestrator.test.js`; `bench.mjs orchestrate-report`): pure helpers mirroring
+  `src/verifier.js` — `parseOrchestratorOutcome` (a `done`/`escalate` reply; unparseable
+  defaults to `escalate`, never `done`), `scoreOrchestrator` (per-model
+  **`effectiveFalseSuccess` = P(oracle fail | outcome `done`)**, the safety metric, plus
+  autonomous-pass and escalation rates, sorted safest-first), and `orchestratorDeltas`
+  (per-task pass@N delta vs the Claude baseline). `bench.mjs orchestrate-report
+  [--baseline <model>]` prints both tables over `benchmarks/results/*.jsonl`; `bench.mjs
+  orchestrate` is an honest stub for the not-yet-built agentic execution driver (a Phase-1
+  pilot can populate rows semi-manually, as the verifier campaign did). See
+  `docs/ORCHESTRATOR.md` §9.
+- Orchestrator-selection design (`docs/ORCHESTRATOR.md`): can the **orchestrator** role (the
+  host that runs the `ornith-loop` skill — today Claude) also go **local-first**, like the
+  verifier? Companion to `VERIFIER.md`, same falsifiable shape — decomposes the skill's six
+  steps by delegability (only grounding recon and corrective-grounding synthesis are genuinely
+  model-hard; the rest is already mechanical or delegated), states the falsifiable question
+  (O1: a local orchestrator matches Claude's `pass@N` on the frozen suite), and defines the
+  metric that can sink it — end-to-end `pass@N`-delta-vs-Claude plus a `false-success` rate
+  (how often it declares a broken run done), the orchestrator's analog of the verifier's
+  `effectiveFalsePass`. Keeps the two presidia against "three confabulators in a row": the
+  Layer-0 oracle as anchor and Claude as the escalation tier. Honest-null "keep Claude as the
+  orchestrator" is a valid outcome. No runner built — this doc is the spec.
+- Two-tier verification with an optional **local first-pass verifier** (`docs/VERIFIER.md`,
+  `verifier/rubric.md`, `src/verifier.js`): Layer 0 stays the mechanical oracle (local, gold
+  truth); Layer 1 is an LLM reviewer that can run local-first — a lightweight Ollama model
+  adjudicates a ground-truth evidence packet (test output + diff + changed files + `orn`
+  signals, never ornith's prose, never the task answer-key) and returns `pass` / `fail` /
+  `uncertain`. `pass` is auto-accepted; `fail`/`uncertain` escalate to the Claude audit tier.
+- Verifier-selection harness: `bench.mjs run --verifier-model <id>` scores a candidate
+  verifier against the oracle on the same run, and `bench.mjs verify-report` prints
+  agreement / false-pass / **effective-false-pass** / escalation per model, sorted
+  safest-first. `effectiveFalsePass` = P(oracle fail | verdict pass) is the selection metric.
+- `ornith-loop` skill step 4 now documents the optional local-first verify flow and points
+  at the selection harness.
+- `orn run --no-tools` — run pi with all tools disabled (forwards pi's `--no-tools`). Used by
+  the Layer-1 verifier so it adjudicates read-only and must return its verdict inline.
+- Decoupled verifier scoring: `bench.mjs run --save-corpus <dir>` freezes each ornith run's
+  ground-truth evidence + gold label, and `bench.mjs verify-corpus --corpus <dir>
+  --verifier-model <id>` replays any candidate over that same frozen corpus — fair
+  cross-candidate comparison with ornith executed once. Rows tag `source:"corpus"`
+  (`verify-report` includes them, `report` skips them). Corpus is gitignored/ephemeral.
+  `run`/`verify-corpus` also accept `--results-dir <path>`.
+- Configurable local verifier: a user-level config (`~/.config/ornith-loop/config.json`,
+  honoring `XDG_CONFIG_HOME`) for the executor model, the Layer-1 local verifier (on/off +
+  model, **off by default** → Claude verifies inline), and the corrective-round budget.
+  New `orn config get|set|path`, and `orn verify --workdir <r> --test-cmd "<cmd>"` — a
+  mechanized read-only Layer-1 verify that reuses the evidence-packet machinery and prints
+  `pass`/`fail`/`uncertain`. `orn install-skill` now writes a default config and prints a
+  discoverable pointer (with detected Ollama models), plus a `--verifier <model>` one-shot
+  flag. `orn run` and `bench.mjs orchestrate` honor the config defaults. `gatherEvidence`
+  extracted to `src/evidence.js` (shared by the benchmark and `orn verify`). The `ornith-loop`
+  skill's steps 3–5 are now config-driven. Presidia unchanged: Layer-0 stays the anchor;
+  the verifier never sees a gold label.
+
+### Changed
+- `docs/DESIGN.md`: the "no local reviewer model" non-goal is superseded by the two-tier
+  model above — explicitly not a cost change (cost/speed remain non-goals; the
+  executor↔verifier model-swap cost is accepted); the escalate-on-doubt rule preserves the
+  independent check a lone local judge would lose, given a local reviewer has been observed
+  to confabulate.
+
+### Fixed
+- Verifier ran unsandboxed: `bench.mjs` invoked the Layer-1 verifier via `orn` with no
+  `--workdir`, so pi executed in the repo cwd with write tools live. A tool-eager verifier
+  (`qwen3-coder:30b`) wrote its verdict to a file instead of replying, which both polluted
+  the working tree and scored as an unparseable reply → silent `uncertain`, confounding its
+  escalation rate. The verifier call now passes `--no-tools`, forcing a read-only inline
+  verdict. (See `journal/2026-07-10-verifier-selection.md`.)
+- Stale verifier tag in docs: the `--verifier-model qwen3-coder-14b` command examples in
+  `docs/VERIFIER.md` and `benchmarks/README.md` used a tag that does not exist on ollama; they
+  now use `qwen3-coder:30b` (the real light-coder tag, as the hardware note already states).
+
 ## [0.3.0] - 2026-07-08
 
 ### Added
@@ -93,7 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`orn` CLI, `ornith-loop` skill, experiment journal).
 - Project documentation: `README.md`, `CHANGELOG.md`, `CLAUDE.md`.
 
-[Unreleased]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/giuseppeoncia/ornith-loop/releases/tag/v0.1.0

@@ -42,6 +42,7 @@ export function assemblePrompt(arm, parts, { round = 1, extra = "" } = {}) {
 export function aggregate(rows) {
   const byKey = new Map();
   for (const r of rows) {
+    if (r && r.source === "corpus") continue; // verifier-replay rows are not executor attempts
     const key = `${r.task} ${r.arm}`;
     if (!byKey.has(key)) byKey.set(key, { task: r.task, arm: r.arm, attempts: [] });
     byKey.get(key).attempts.push(r);
@@ -98,6 +99,17 @@ export function aggregate(rows) {
   }
   report.sort((a, b) => (a.task === b.task ? a.arm.localeCompare(b.arm) : a.task.localeCompare(b.task)));
   return report;
+}
+
+// caffeinate argv to keep a Mac awake for a long run, or null off darwin.
+// A sweep spans hours; if the Mac idle-sleeps mid-run it truncates the in-flight
+// orn call into a spurious timeout / no-change "fail" (observed 2026-07-11 — four
+// K=20 rows contaminated). `-i` prevents idle system sleep, `-m` disk idle sleep,
+// `-s` system sleep on AC; `-w <pid>` releases the assertion when our process
+// exits, so no cleanup is needed. caffeinate is macOS-only → null elsewhere.
+export function caffeinateArgs(platform, pid) {
+  if (platform !== "darwin") return null;
+  return ["-i", "-m", "-s", "-w", String(pid)];
 }
 
 // The three headline deltas from DESIGN.md's hypotheses, per task.

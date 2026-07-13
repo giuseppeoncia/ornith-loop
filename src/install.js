@@ -1,5 +1,6 @@
-import { mkdirSync, rmSync, symlinkSync, cpSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, rmSync, symlinkSync, cpSync, existsSync, writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { defaultConfig, configPath } from "./config.js";
 
 const SKILL_NAME = "ornith-loop";
 
@@ -48,4 +49,29 @@ export function installSkill(targets, sourceDir) {
     }
     return { name, dest, method };
   });
+}
+
+// Write the default config if none exists yet. Idempotent.
+export function ensureDefaultConfig(env, home) {
+  const path = configPath(env, home);
+  if (existsSync(path)) return { created: false, path };
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(defaultConfig(), null, 2) + "\n");
+  return { created: true, path };
+}
+
+// The install-time pointer that makes the optional local verifier discoverable.
+export function discoveryMessage(cfg, ollamaModels) {
+  const lines = [
+    "",
+    `Local verifier: ${cfg.verifier.enabled ? `ON (${cfg.verifier.model})` : "OFF (Claude verifies each run)"}.`,
+    "Optional: offload the first verification pass to a local model —",
+    "  orn config set verifier.enabled true",
+    "  orn config set verifier.model <id>",
+  ];
+  if (Array.isArray(ollamaModels) && ollamaModels.length) {
+    lines.push(`Ollama models detected: ${ollamaModels.join(", ")}`);
+  }
+  lines.push("See docs/VERIFIER.md for how to pick one (the metric is false-pass rate).");
+  return lines.join("\n") + "\n";
 }

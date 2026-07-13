@@ -1,5 +1,6 @@
 node_modules/
 runs/
 benchmarks/results/
+benchmarks/corpus/
 *.log
 .DS_Store

@@ -18,6 +18,31 @@ model. That means you need, on your own workstation:
 Sanity check before benchmarking: `orn run "say hi" --timeout 60` should produce a run
 record. If that works, the driver will.
 
+### The executor model (exact build)
+
+Every result in this repo was produced with a **specific** ornith build; reproduction depends
+on matching it. The `ornith-1.0-9b-64k` tag is **not** an upstream ollama model — it is built
+locally from:
+
+- **Source GGUF:** [`KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF`](https://huggingface.co/KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF)
+  (~9.5 GB). "fixed" = it patches a bug in the **chat template** baked into the GGUF metadata;
+  the stock ornith GGUF's template is broken. (Verified: the `ornith-1.0-9b-64k` and
+  `hf.co/KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF` tags resolve to the **same** blob
+  `sha256-ddacff58…`, so the tag derives directly from this GGUF.)
+- **Modelfile** (the `-64k` tag = this source plus these three parameters):
+
+  ```
+  FROM hf.co/KikoCis/Ornith-1.0-9B-Ollama-fixed-GGUF:latest
+  PARAMETER top_p 0.95
+  PARAMETER num_ctx 65536
+  PARAMETER temperature 1
+  ```
+
+  `num_ctx 65536` is the 64 K context the tag name refers to. Build it with
+  `ollama create ornith-1.0-9b-64k -f Modelfile`. `orn`/`bench.mjs` also pass `--thinking off`
+  (required — see the root `CLAUDE.md`); the chat template itself lives in the GGUF, not the
+  Modelfile (`ollama show ornith-1.0-9b-64k --template` prints the patched Qwen-style Jinja).
+
 ## What the driver does (and doesn't)
 
 `bench.mjs` owns only the **mechanical, reproducible** layer:
@@ -57,6 +82,11 @@ Round 1 of A and B2 is also mechanical — run it the same way:
 node benchmarks/bench.mjs run --task T1-scratch --arm A  --repeats 5   # records round 1
 node benchmarks/bench.mjs run --task T1-scratch --arm B2 --repeats 5
 ```
+
+> **Don't let the Mac sleep.** `run` auto-wraps itself in `caffeinate -i` on macOS for the
+> duration (it prints `caffeinate active …`), because an idle sleep mid-sweep truncates the
+> in-flight `orn` call into a bogus timeout/no-change fail. If you drive `orn` directly in
+> some other long loop, prefix it with `caffeinate -i` yourself.
 
 > **Re-running accumulates — wipe between campaigns.** Each `run` *appends* to
 > `results/<task>__<arm>.jsonl` and numbers repeats from 1 on every invocation, while
@@ -120,3 +150,114 @@ pipeline, not ornith):
 ```bash
 ORN_PI_BIN="$PWD/test/fixtures/fake-pi.js" node benchmarks/bench.mjs run --task T1-scratch --arm B1 --repeats 2
 ```
+
+## Selecting a local verifier (Layer 1)
+
+The same driver can score a **local first-pass verifier model** against the oracle's gold
+labels — the experiment specified in [`../docs/VERIFIER.md`](../docs/VERIFIER.md). Add
+`--verifier-model <id>` to any `run`: the driver runs the oracle (gold) **and** the verifier
+(prediction) on the same workdir, feeding the model a ground-truth evidence packet built from
+`../verifier/rubric.md` (test output + diff + changed files + `orn` signals — never ornith's
+prose, never the task answer-key). Then read the scores:
+
+```bash
+node benchmarks/bench.mjs run --task T3-inplace --arm A --repeats 5 --verifier-model qwen3-coder:30b
+node benchmarks/bench.mjs verify-report
+```
+
+`verify-report` prints, per model, `agree` / `falsePass` / **`effFP`** / `escalate`, sorted
+safest-first. `effFP` (false-pass among auto-accepted passes) is the selection metric — pick
+the lightest model with `effFP ≈ 0` at an acceptable escalation rate. See VERIFIER.md for why
+false-pass is the only metric that can sink the design.
+
+Dry-run the verifier plumbing without ollama — the fake pi emits a JSON verdict when it sees
+a verifier prompt (`FAKE_PI_VERDICT` sets it, default `uncertain`):
+
+```bash
+ORN_PI_BIN="$PWD/test/fixtures/fake-pi.js" FAKE_PI_VERDICT=pass \
+  node benchmarks/bench.mjs run --task T1-scratch --arm B1 --repeats 1 --verifier-model fake
+node benchmarks/bench.mjs verify-report
+```
+
+### Fair cross-candidate comparison (decoupled corpus)
+
+To score several candidates on the *same* ornith runs (and run ornith only once), freeze a
+corpus in phase 1, then replay each candidate in phase 2:
+
+```bash
+rm -rf benchmarks/results benchmarks/corpus
+# Phase 1 — build the corpus once (auto-caffeinated on macOS)
+node benchmarks/bench.mjs run --task T6-inplace-hard --arm A --repeats 20 --save-corpus benchmarks/corpus/main
+node benchmarks/bench.mjs run --task T3-inplace      --arm A --repeats 20 --save-corpus benchmarks/corpus/main
+# Phase 2 — replay each candidate over the SAME corpus (no ornith re-run)
+for m in qwen3.5:4b qwen3-coder:30b gemma3:4b phi4 llama3.1:8b; do
+  node benchmarks/bench.mjs verify-corpus --corpus benchmarks/corpus/main --verifier-model "$m"
+done
+node benchmarks/bench.mjs verify-report
+```
+
+`--save-corpus` and the coupled `--verifier-model` are independent; the corpus is
+gitignored/ephemeral (conclusions go in the journal). `verify-corpus` rows are tagged
+`source:"corpus"`: `verify-report` includes them, `report` ignores them.
+
+### Selection vs. production
+
+Everything above (`bench.mjs run --verifier-model`, `verify-report`, `verify-corpus`) is the
+**selection** harness — for empirically choosing a candidate model against gold labels. Once
+you've picked one, put it into production via the `orn` CLI, not this harness:
+
+```bash
+orn config set verifier.enabled true
+orn config set verifier.model qwen3.5:4b
+orn verify --workdir <repo> --test-cmd "npm test"
+```
+
+See [`../docs/VERIFIER.md`](../docs/VERIFIER.md#production-use-orn-config--orn-verify) for
+details.
+
+## Selecting a local orchestrator (the loop driver)
+
+The next role after the verifier: can a lightweight **local** model drive the whole loop
+(recon → minimal-scaffold prompt → `orn run` → verify → bounded corrective loop → journal),
+with the Layer-0 oracle kept as the anchor and Claude kept as the escalation tier? The
+experiment is specified in [`../docs/ORCHESTRATOR.md`](../docs/ORCHESTRATOR.md); the roadmap
+and how-to-resume are in [`../docs/ROADMAP.md`](../docs/ROADMAP.md).
+
+**What's built** (pure, unit-tested — `src/orchestrator.js`): `scoreOrchestrator`,
+`orchestratorDeltas`, and `bench.mjs orchestrate-report`. **What's not:** the agentic
+execution driver — `bench.mjs orchestrate` is an honest stub. So a Phase-1 pilot is
+**semi-manual** (Claude in the seat for the baseline), exactly as the benchmark/verifier
+campaigns started.
+
+Record one row per (task, repeat) by appending to `results/*.jsonl`:
+
+```jsonc
+{ "task": "T6-inplace-hard", "repeat": 1, "orchestratorModel": "claude",
+  "orchestratorOutcome": "done",        // "done" | "escalate"
+  "pass": true,                          // the oracle GOLD label on the final workdir
+  "orchestratorRounds": 2, "orchestratorReason": "tests green, diff in scope" }
+```
+
+Baseline rows use `orchestratorModel: "claude"` — the reference the per-task deltas compare
+against. `orchestratorOutcome` is the model's terminal declaration; `pass` is always the
+mechanical oracle, never the model's self-report. Then:
+
+```bash
+node benchmarks/bench.mjs orchestrate-report            # --baseline <model> defaults to "claude"
+```
+
+`orchestrate-report` prints, per model, `autoPass` / `falseSucc` / **`effFS`** / `escalate`,
+sorted safest-first, then the per-task **pass@N delta vs the Claude baseline**. `effFS`
+(false-success among `done` calls = P(oracle fail | outcome done)) is the selection metric —
+the orchestrator's analog of the verifier's `effFP`: an orchestrator that declares a broken
+run finished is worse than none, since ornith already confabulates. Pick the lightest model
+with `effFS ≈ 0` that matches Claude's pass@N.
+
+Suggested pilot: `T6-inplace-hard` + `T4-additive-hard` (the hard tasks where round-1
+failures fire, so the corrective loop — the orchestrator's hardest step — is actually
+exercised). The same runbook cautions apply: don't let the Mac idle-sleep during a sweep, and
+`results/` is gitignored → distil the numbers into `journal/YYYY-MM-DD-orchestrator-*.md`.
+
+Dry-run the report plumbing without ollama by hand-writing a couple of rows into
+`results/<task>__orch-smoke.jsonl` (schema above) and running `orchestrate-report`; delete
+the file afterwards.

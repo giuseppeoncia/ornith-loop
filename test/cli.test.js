@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,6 +60,53 @@ test("orn --help exits 0 with usage", async () => {
   assert.match(stdout, /orn run/);
 });
 
+test("orn config: set then get round-trips via XDG_CONFIG_HOME", async () => {
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  try {
+    const env = { ...process.env, XDG_CONFIG_HOME: cfgHome };
+    await pexec(process.execPath, [orn, "config", "set", "verifier.model", "gemma3:4b"], { env });
+    const { stdout } = await pexec(process.execPath, [orn, "config", "get", "verifier.model"], { env });
+    assert.match(stdout, /gemma3:4b/);
+    const path = await pexec(process.execPath, [orn, "config", "path"], { env });
+    assert.match(path.stdout, /ornith-loop\/config\.json/);
+  } finally {
+    await rm(cfgHome, { recursive: true, force: true });
+  }
+});
+
+test("orn verify: not configured -> exit 3 with guidance", async () => {
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  const wd = await mkdtemp(join(tmpdir(), "orn-wd-"));
+  try {
+    await assert.rejects(
+      pexec(process.execPath, [orn, "verify", "--workdir", wd, "--test-cmd", "node --version"], {
+        env: { ...process.env, XDG_CONFIG_HOME: cfgHome, ORN_PI_BIN: fakePi },
+      }),
+      (err) => err.code === 3 && /enable/i.test(err.stderr)
+    );
+  } finally {
+    await rm(cfgHome, { recursive: true, force: true });
+    await rm(wd, { recursive: true, force: true });
+  }
+});
+
+test("orn verify: dry-run via fake-pi prints the stubbed verdict", async () => {
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  const wd = await mkdtemp(join(tmpdir(), "orn-wd-"));
+  try {
+    const { spawnSync } = await import("node:child_process");
+    const git = (a) => spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...a], { cwd: wd });
+    git(["init", "-q"]); git(["commit", "-q", "--allow-empty", "-m", "base"]);
+    const env = { ...process.env, XDG_CONFIG_HOME: cfgHome, ORN_PI_BIN: fakePi, FAKE_PI_VERDICT: "pass" };
+    await pexec(process.execPath, [orn, "config", "set", "verifier.enabled", "true"], { env });
+    const { stdout } = await pexec(process.execPath, [orn, "verify", "--workdir", wd, "--test-cmd", "node --version"], { env });
+    assert.match(stdout, /^pass/);
+  } finally {
+    await rm(cfgHome, { recursive: true, force: true });
+    await rm(wd, { recursive: true, force: true });
+  }
+});
+
 test("orn install-skill --target claude: symlinks into CLAUDE_SKILLS_DIR", async () => {
   const skills = await mkdtemp(join(tmpdir(), "orn-skills-"));
   try {
@@ -71,5 +118,66 @@ test("orn install-skill --target claude: symlinks into CLAUDE_SKILLS_DIR", async
     assert.ok(files.includes("ornith-loop"), "skill installed at target dir");
   } finally {
     await rm(skills, { recursive: true, force: true });
+  }
+});
+
+test("orn install-skill --verifier: enables the verifier and sets its model in config", async () => {
+  const skills = await mkdtemp(join(tmpdir(), "orn-skills-"));
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  try {
+    const env = { ...process.env, CLAUDE_SKILLS_DIR: skills, XDG_CONFIG_HOME: cfgHome };
+    await pexec(process.execPath, [orn, "install-skill", "--target", "claude", "--verifier", "gemma3:4b"], { env });
+    const enabled = await pexec(process.execPath, [orn, "config", "get", "verifier.enabled"], { env });
+    assert.match(enabled.stdout, /true/);
+    const model = await pexec(process.execPath, [orn, "config", "get", "verifier.model"], { env });
+    assert.match(model.stdout, /gemma3:4b/);
+  } finally {
+    await rm(skills, { recursive: true, force: true });
+    await rm(cfgHome, { recursive: true, force: true });
+  }
+});
+
+test("orn run: uses config executor.model unless --model overrides it", async () => {
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  const runs = await mkdtemp(join(tmpdir(), "orn-cli-"));
+  try {
+    const env = { ...process.env, XDG_CONFIG_HOME: cfgHome, ORN_PI_BIN: fakePi, FAKE_PI_MODE: "success" };
+    await pexec(process.execPath, [orn, "config", "set", "executor.model", "some-fake-model"], { env });
+
+    const { stdout } = await pexec(process.execPath, [orn, "run", "hi", "--runs-dir", runs], { env });
+    const recordPath = stdout.match(/record: (.*)/)[1].trim();
+    const record = JSON.parse(await readFile(recordPath, "utf8"));
+    assert.equal(record.model, "some-fake-model");
+
+    const { stdout: stdout2 } = await pexec(
+      process.execPath,
+      [orn, "run", "hi", "--runs-dir", runs, "--model", "other-model"],
+      { env }
+    );
+    const recordPath2 = stdout2.match(/record: (.*)/)[1].trim();
+    const record2 = JSON.parse(await readFile(recordPath2, "utf8"));
+    assert.equal(record2.model, "other-model");
+  } finally {
+    await rm(cfgHome, { recursive: true, force: true });
+    await rm(runs, { recursive: true, force: true });
+  }
+});
+
+test("orn install-skill: writes a default config and prints the verifier pointer", async () => {
+  const skills = await mkdtemp(join(tmpdir(), "orn-skills-"));
+  const cfgHome = await mkdtemp(join(tmpdir(), "orn-cfg-"));
+  try {
+    const { stdout } = await pexec(process.execPath, [orn, "install-skill", "--target", "claude"], {
+      env: { ...process.env, CLAUDE_SKILLS_DIR: skills, XDG_CONFIG_HOME: cfgHome },
+    });
+    assert.match(stdout, /Local verifier: OFF/);
+    assert.match(stdout, /verifier\.enabled true/);
+    const { stdout: got } = await pexec(process.execPath, [orn, "config", "get", "verifier.enabled"], {
+      env: { ...process.env, XDG_CONFIG_HOME: cfgHome },
+    });
+    assert.match(got, /false/);
+  } finally {
+    await rm(skills, { recursive: true, force: true });
+    await rm(cfgHome, { recursive: true, force: true });
   }
 });
