@@ -31,3 +31,78 @@ export function extractGoalTokens(goalText) {
   }
   return [...tokens].filter((t) => !STOPWORDS.has(t.toLowerCase()));
 }
+
+import { readFileSync, existsSync } from "node:fs";
+import { join, basename } from "node:path";
+import { spawnSync } from "node:child_process";
+
+const ANSWER_KEY_FILES = new Set(["meta.json", "oracle.mjs", "grounding.md", "scaffold-heavy.md", "goal.md"]);
+const MAX_GREP_HITS = 40;
+const MAX_FILE_LINES = 400;
+const MAX_FILE_BYTES = 16 * 1024;
+
+function git(workdir, args) {
+  const res = spawnSync("git", ["-C", workdir, ...args], { encoding: "utf8" });
+  return res.status === 0 ? res.stdout || "" : ""; // git grep exits 1 on no-match -> ""
+}
+
+export function extractRecon(workdir, goalText, { testCmd } = {}) {
+  const testCommand = Array.isArray(testCmd) ? testCmd.join(" ") : typeof testCmd === "string" ? testCmd : "";
+  const tracked = git(workdir, ["ls-files"]).split("\n").map((s) => s.trim()).filter(Boolean);
+  const fileTree = tracked.filter((f) => !ANSWER_KEY_FILES.has(basename(f)));
+
+  let packageJson = null;
+  const pkgPath = join(workdir, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+      packageJson = { name: pkg.name ?? null, scripts: pkg.scripts ?? null, engines: pkg.engines ?? null };
+    } catch {
+      packageJson = null;
+    }
+  }
+
+  const goalTokens = extractGoalTokens(goalText);
+  const grepHits = [];
+  let grepTruncated = false;
+  const hitFiles = new Set();
+  outer: for (const token of goalTokens) {
+    for (const line of git(workdir, ["grep", "-n", "-F", token]).split("\n")) {
+      const m = line.match(/^([^:]+):(\d+):(.*)$/);
+      if (!m) continue;
+      const file = m[1];
+      if (ANSWER_KEY_FILES.has(basename(file))) continue;
+      if (grepHits.length >= MAX_GREP_HITS) { grepTruncated = true; break outer; }
+      grepHits.push({ token, file, line: Number(m[2]), text: m[3].trim() });
+      hitFiles.add(file);
+    }
+  }
+
+  const sourceOfHitFiles = [];
+  for (const file of hitFiles) {
+    const p = join(workdir, file);
+    if (!existsSync(p)) continue;
+    let content = readFileSync(p, "utf8");
+    let truncated = false;
+    const lines = content.split("\n");
+    if (lines.length > MAX_FILE_LINES) { content = lines.slice(0, MAX_FILE_LINES).join("\n"); truncated = true; }
+    if (Buffer.byteLength(content, "utf8") > MAX_FILE_BYTES) { content = content.slice(0, MAX_FILE_BYTES); truncated = true; }
+    sourceOfHitFiles.push({ file, content, truncated });
+  }
+  sourceOfHitFiles.sort((a, b) => a.file.localeCompare(b.file));
+
+  return { testCommand, fileTree, packageJson, goalTokens, grepHits, grepTruncated, sourceOfHitFiles };
+}
+
+export function renderFactPool(fp) {
+  const out = ["# RECON FACT-POOL", ""];
+  out.push("## Test command", fp.testCommand || "(none provided)", "");
+  out.push("## Files (tracked)", ...(fp.fileTree.length ? fp.fileTree.map((f) => `- ${f}`) : ["(none)"]), "");
+  if (fp.packageJson) out.push("## package.json", "```json", JSON.stringify(fp.packageJson, null, 2), "```", "");
+  out.push("## Goal tokens", fp.goalTokens.length ? fp.goalTokens.join(", ") : "(none)", "");
+  out.push(`## Grep hits${fp.grepTruncated ? " (truncated)" : ""}`);
+  out.push(...(fp.grepHits.length ? fp.grepHits.map((h) => `- ${h.file}:${h.line}: ${h.text}`) : ["(none)"]), "");
+  out.push("## Source of files with hits");
+  for (const s of fp.sourceOfHitFiles) out.push(`### ${s.file}${s.truncated ? " (truncated)" : ""}`, "```", s.content, "```", "");
+  return out.join("\n");
+}
