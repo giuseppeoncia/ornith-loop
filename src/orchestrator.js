@@ -102,6 +102,22 @@ export function parseRoundDecision(text) {
   return esc("no parseable action; defaulting to escalate (route to Claude)");
 }
 
+// Parse the candidate's assembled round-1 grounding (M2 recon). Prefers a JSON
+// object { "grounding": "<facts>" }; falls back to the stripped plain/fenced body
+// so a model that just writes the facts still works. Blank -> { empty: true }.
+// Content is NOT sanitized here — whether it is "facts, not steps" is measured,
+// not enforced (docs/ORCHESTRATOR.md §5.1).
+export function parseGrounding(text) {
+  const raw = typeof text === "string" ? text : "";
+  const obj = extractJsonObject(raw);
+  if (obj && typeof obj.grounding === "string") {
+    const g = obj.grounding.trim();
+    return g ? { grounding: g, empty: false } : { grounding: "", empty: true };
+  }
+  const body = raw.replace(/```[a-zA-Z]*\n?/g, "").trim();
+  return body ? { grounding: body, empty: false } : { grounding: "", empty: true };
+}
+
 // Best-effort: parse the whole string, else the widest {...} slice (handles a
 // model that wraps JSON in prose or code fences). Shared shape with verifier.js.
 function extractJsonObject(text) {

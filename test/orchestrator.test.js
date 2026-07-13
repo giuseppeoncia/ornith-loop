@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { OUTCOMES, parseOrchestratorOutcome, scoreOrchestrator, orchestratorDeltas, ROUND_ACTIONS, parseRoundDecision } from "../src/orchestrator.js";
+import { OUTCOMES, parseOrchestratorOutcome, scoreOrchestrator, orchestratorDeltas, ROUND_ACTIONS, parseRoundDecision, parseGrounding } from "../src/orchestrator.js";
 
 test("OUTCOMES is the closed set", () => {
   assert.deepEqual(OUTCOMES, ["done", "escalate"]);
@@ -144,4 +144,29 @@ test("parseRoundDecision: JSON in prose/fences parses; a lone done in prose is a
   assert.equal(parseRoundDecision('ok:\n```json\n{"action":"DONE"}\n```').action, "done");
   assert.equal(parseRoundDecision("I think we are done").action, "done");
   assert.equal(parseRoundDecision("done, or maybe retry").action, "escalate");
+});
+
+test("parseGrounding: JSON object with a grounding string", () => {
+  const r = parseGrounding('{"grounding":"- withTax lives in src/pricing.mjs\\n- run node --test"}');
+  assert.equal(r.empty, false);
+  assert.match(r.grounding, /withTax lives in src\/pricing\.mjs/);
+});
+
+test("parseGrounding: JSON in prose/fences is recovered", () => {
+  const r = parseGrounding('Sure:\n```json\n{"grounding":"- keep roundCents byte-exact"}\n```');
+  assert.equal(r.empty, false);
+  assert.match(r.grounding, /roundCents/);
+});
+
+test("parseGrounding: plain-text body (no JSON) is taken as grounding", () => {
+  const r = parseGrounding("- withTax is in src/pricing.mjs\n- run `node --test`");
+  assert.equal(r.empty, false);
+  assert.match(r.grounding, /withTax/);
+});
+
+test("parseGrounding: empty / whitespace / non-string -> empty", () => {
+  assert.deepEqual(parseGrounding(""), { grounding: "", empty: true });
+  assert.deepEqual(parseGrounding("   \n"), { grounding: "", empty: true });
+  assert.deepEqual(parseGrounding(null), { grounding: "", empty: true });
+  assert.deepEqual(parseGrounding('{"grounding":"   "}'), { grounding: "", empty: true });
 });
