@@ -23,9 +23,10 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
 import { buildEvidencePacket, parseVerdict, scoreVerifier, corpusRecordFrom } from "../src/verifier.js";
-import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision } from "../src/orchestrator.js";
+import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision, parseGrounding, orchestratorReconDeltas } from "../src/orchestrator.js";
 import { gatherEvidence } from "../src/evidence.js";
 import { loadConfig } from "../src/config.js";
+import { extractRecon, renderFactPool } from "../src/recon.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ORN = resolve(HERE, "..", "bin", "orn.js");
@@ -33,6 +34,7 @@ const TASKS_DIR = join(HERE, "tasks");
 const RESULTS_DIR = join(HERE, "results");
 const RUBRIC_PATH = resolve(HERE, "..", "verifier", "rubric.md");
 const ORCH_RUBRIC_PATH = resolve(HERE, "..", "orchestrator", "rubric.md");
+const ORCH_RECON_RUBRIC_PATH = resolve(HERE, "..", "orchestrator", "recon-rubric.md");
 
 function die(msg) {
   process.stderr.write(`bench: ${msg}\n`);
@@ -303,26 +305,37 @@ function cmdOrchestrateReport(o) {
   const rows = loadRows().filter((r) => r.orchestratorOutcome);
   if (!rows.length) return process.stdout.write("no orchestrator results yet (see `orchestrate` and docs/ORCHESTRATOR.md)\n");
   const baselineModel = typeof o.baseline === "string" ? o.baseline : "claude";
-  const scored = scoreOrchestrator(rows);
+  const modeOf = (r) => (r.reconMode === "candidate" ? "candidate" : "fixed");
 
-  process.stdout.write("\nOrchestrator vs oracle (sorted safest-first)\n");
-  process.stdout.write("model                          n  autoPass  falseSucc  effFS  escalate\n");
-  for (const s of scored) {
-    process.stdout.write(
-      `${String(s.model).padEnd(28)} ${String(s.n).padStart(3)}  ${pct(s.autonomousPassRate)}    ${pct(s.falseSuccessRate)}   ${pct(s.effectiveFalseSuccess)}   ${pct(s.escalationRate)}\n`
-    );
-  }
-
-  const dl = orchestratorDeltas(rows, { baselineModel });
-  if (dl.length) {
-    process.stdout.write(`\nPer-task pass@N delta vs baseline '${baselineModel}' (positive = candidate matches/beats Claude)\n`);
-    process.stdout.write("task            model                    passN  baseN   delta\n");
-    for (const d of dl) {
+  for (const mode of ["fixed", "candidate"]) {
+    const sub = rows.filter((r) => modeOf(r) === mode);
+    if (!sub.length) continue;
+    process.stdout.write(`\n== recon: ${mode} ${mode === "fixed" ? "(M1 — gold grounding)" : "(M2 — candidate-assembled)"} ==\n`);
+    process.stdout.write("model                          n  autoPass  falseSucc  effFS  escalate\n");
+    for (const s of scoreOrchestrator(sub)) {
       process.stdout.write(
-        `${d.task.padEnd(15)} ${String(d.model).padEnd(24)} ${pct(d.autonomousPassN)}  ${pct(d.baselinePassN)}  ${signed(d.delta)}\n`
+        `${String(s.model).padEnd(28)} ${String(s.n).padStart(3)}  ${pct(s.autonomousPassRate)}    ${pct(s.falseSuccessRate)}   ${pct(s.effectiveFalseSuccess)}   ${pct(s.escalationRate)}\n`
       );
     }
+    const dl = orchestratorDeltas(sub, { baselineModel });
+    if (dl.length) {
+      process.stdout.write(`\nPer-task pass@N delta vs baseline '${baselineModel}' (positive = candidate matches/beats Claude)\n`);
+      process.stdout.write("task            model                    passN  baseN   delta\n");
+      for (const d of dl) {
+        process.stdout.write(`${d.task.padEnd(15)} ${String(d.model).padEnd(24)} ${pct(d.autonomousPassN)}  ${pct(d.baselinePassN)}  ${signed(d.delta)}\n`);
+      }
+    }
   }
+
+  const rd = orchestratorReconDeltas(rows);
+  if (rd.length) {
+    process.stdout.write("\nRecon-delegation delta — candidate-M2 pass@N vs the SAME model's fixed-M1 (negative = cost of self-assembled recon)\n");
+    process.stdout.write("task            model                    M2     M1     delta\n");
+    for (const d of rd) {
+      process.stdout.write(`${d.task.padEnd(15)} ${String(d.model).padEnd(24)} ${pct(d.candidatePassN)}  ${pct(d.fixedPassN)}  ${signed(d.delta)}\n`);
+    }
+  }
+
   process.stdout.write(
     "\neffFS = false-success among 'done' calls (the safety metric; want ≈0)\n" +
       "autoPass = loops the orchestrator finished itself and the oracle confirmed\n" +
@@ -336,6 +349,20 @@ function cmdOrchestrateReport(o) {
 // only the per-round decision (done/retry/escalate) + the corrective grounding fact.
 // Presidia: Layer-0 oracle scores post-hoc and is never shown to the candidate; the
 // Layer-1 verifier is a separate model. One row per (task, repeat).
+// M2: the candidate assembles round-1 grounding from the deterministic fact-pool.
+// Read-only, inline (--no-tools). Returns { grounding, empty } (parseGrounding).
+function assembleRecon({ task, goal, factPoolText, model }) {
+  const rubric = readFileSync(ORCH_RECON_RUBRIC_PATH, "utf8");
+  const prompt = `${rubric}\n\n---\n\n# RECON ASSEMBLY\n\n## GOAL\n${(goal || "").trim()}\n\n${factPoolText}`;
+  const runsDir = mkdtempSync(join(tmpdir(), "bench-orch-recon-"));
+  try {
+    const dec = runOrn({ prompt, model, label: `${task}-orch-recon`, runsDir, noTools: true });
+    return parseGrounding(dec.record?.finalText || "");
+  } finally {
+    rmSync(runsDir, { recursive: true, force: true });
+  }
+}
+
 function cmdOrchestrate(o) {
   const task = o.task || die("--task required");
   const orchestratorModel = typeof o["orchestrator-model"] === "string" ? o["orchestrator-model"] : die("--orchestrator-model <id> required");
@@ -349,12 +376,27 @@ function cmdOrchestrate(o) {
   const t = loadTask(task);
   keepAwake();
   mkdirSync(resultsDir, { recursive: true });
+  const reconMode = o.recon === "candidate" ? "candidate" : "fixed";
   const slug = orchestratorModel.replace(/[^a-zA-Z0-9]+/g, "-");
-  const resultsFile = join(resultsDir, `${task}__orch-${slug}.jsonl`);
+  const resultsFile = join(resultsDir, `${task}__orch-${slug}${reconMode === "candidate" ? "-recon" : ""}.jsonl`);
   const rubric = readFileSync(ORCH_RUBRIC_PATH, "utf8");
 
   for (const repeat of repeats) {
-    let grounding = (t.parts.grounding || "").trim(); // recon FIXED in M1
+    let reconGrounding = null;
+    let reconEmpty = false;
+    let grounding;
+    if (reconMode === "candidate") {
+      const reconWd = makeWorkdir(t);
+      let factPoolText;
+      try { factPoolText = renderFactPool(extractRecon(reconWd, t.parts.goal, { testCmd: t.meta.testCmd })); }
+      finally { rmSync(reconWd, { recursive: true, force: true }); }
+      const r = assembleRecon({ task, goal: t.parts.goal, factPoolText, model: orchestratorModel });
+      reconGrounding = r.grounding;
+      reconEmpty = r.empty;
+      grounding = r.grounding || "";
+    } else {
+      grounding = (t.parts.grounding || "").trim(); // recon FIXED in M1
+    }
     let outcome = "escalate";
     let reason = "";
     let roundsUsed = 0;
@@ -410,6 +452,8 @@ function cmdOrchestrate(o) {
       const row = {
         task, repeat, orchestratorModel, orchestratorOutcome: outcome,
         pass: oracle.pass, orchestratorRounds: roundsUsed, orchestratorReason: reason, verifierModel,
+        reconMode,
+        ...(reconMode === "candidate" ? { reconGrounding, reconEmpty } : {}),
       };
       appendFileSync(resultsFile, JSON.stringify(row) + "\n");
       process.stdout.write(`${task}-orch-k${repeat}: ${outcome} (rounds ${roundsUsed}, oracle ${oracle.pass ? "PASS" : "fail"})\n`);
@@ -457,6 +501,19 @@ function cmdVerifyCorpus(o) {
   }
 }
 
+// Print the deterministic recon fact-pool for a task (docs/ORCHESTRATOR.md §6.2).
+// Read-only; used for transparency and to feed the semi-manual Claude-M2 ceiling.
+function cmdRecon(o) {
+  const task = o.task || die("--task required");
+  const t = loadTask(task);
+  const wd = makeWorkdir(t);
+  try {
+    process.stdout.write(renderFactPool(extractRecon(wd, t.parts.goal, { testCmd: t.meta.testCmd })) + "\n");
+  } finally {
+    rmSync(wd, { recursive: true, force: true });
+  }
+}
+
 const argv = process.argv.slice(2);
 const cmd = argv[0];
 const opts = parseFlags(argv.slice(1));
@@ -466,14 +523,16 @@ else if (cmd === "verify-report") cmdVerifyReport();
 else if (cmd === "orchestrate") cmdOrchestrate(opts);
 else if (cmd === "orchestrate-report") cmdOrchestrateReport(opts);
 else if (cmd === "verify-corpus") cmdVerifyCorpus(opts);
+else if (cmd === "recon") cmdRecon(opts);
 else {
   process.stdout.write(
     "usage: node benchmarks/bench.mjs run --task <id> --arm <A|B1|B2|B3> [--repeats N] [--model id] [--verifier-model id] [--save-corpus dir] [--results-dir path] [--round N --extra file --repeat K]\n" +
       "       node benchmarks/bench.mjs verify-corpus --corpus <dir> --verifier-model <id> [--results-dir path]\n" +
       "       node benchmarks/bench.mjs report\n" +
       "       node benchmarks/bench.mjs verify-report\n" +
-      "       node benchmarks/bench.mjs orchestrate --task <id> --orchestrator-model <id> [--verifier-model <id>] [--repeats N] [--rounds N] [--results-dir path]\n" +
-      "       node benchmarks/bench.mjs orchestrate-report [--baseline <model>]\n"
+      "       node benchmarks/bench.mjs orchestrate --task <id> --orchestrator-model <id> [--recon fixed|candidate] [--verifier-model <id>] [--repeats N] [--rounds N] [--results-dir path]\n" +
+      "       node benchmarks/bench.mjs orchestrate-report [--baseline <model>]\n" +
+      "       node benchmarks/bench.mjs recon --task <id>\n"
   );
   process.exit(cmd ? 2 : 0);
 }

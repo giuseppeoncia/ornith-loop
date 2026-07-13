@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { OUTCOMES, parseOrchestratorOutcome, scoreOrchestrator, orchestratorDeltas, ROUND_ACTIONS, parseRoundDecision } from "../src/orchestrator.js";
+import {
+  OUTCOMES,
+  parseOrchestratorOutcome,
+  scoreOrchestrator,
+  orchestratorDeltas,
+  ROUND_ACTIONS,
+  parseRoundDecision,
+  parseGrounding,
+  orchestratorReconDeltas,
+} from "../src/orchestrator.js";
 
 test("OUTCOMES is the closed set", () => {
   assert.deepEqual(OUTCOMES, ["done", "escalate"]);
@@ -144,4 +153,47 @@ test("parseRoundDecision: JSON in prose/fences parses; a lone done in prose is a
   assert.equal(parseRoundDecision('ok:\n```json\n{"action":"DONE"}\n```').action, "done");
   assert.equal(parseRoundDecision("I think we are done").action, "done");
   assert.equal(parseRoundDecision("done, or maybe retry").action, "escalate");
+});
+
+test("parseGrounding: JSON object with a grounding string", () => {
+  const r = parseGrounding('{"grounding":"- withTax lives in src/pricing.mjs\\n- run node --test"}');
+  assert.equal(r.empty, false);
+  assert.match(r.grounding, /withTax lives in src\/pricing\.mjs/);
+});
+
+test("parseGrounding: JSON in prose/fences is recovered", () => {
+  const r = parseGrounding('Sure:\n```json\n{"grounding":"- keep roundCents byte-exact"}\n```');
+  assert.equal(r.empty, false);
+  assert.match(r.grounding, /roundCents/);
+});
+
+test("parseGrounding: plain-text body (no JSON) is taken as grounding", () => {
+  const r = parseGrounding("- withTax is in src/pricing.mjs\n- run `node --test`");
+  assert.equal(r.empty, false);
+  assert.match(r.grounding, /withTax/);
+});
+
+test("parseGrounding: empty / whitespace / non-string -> empty", () => {
+  assert.deepEqual(parseGrounding(""), { grounding: "", empty: true });
+  assert.deepEqual(parseGrounding("   \n"), { grounding: "", empty: true });
+  assert.deepEqual(parseGrounding(null), { grounding: "", empty: true });
+  assert.deepEqual(parseGrounding('{"grounding":"   "}'), { grounding: "", empty: true });
+});
+
+test("orchestratorReconDeltas: candidate-M2 pass@N minus same model's fixed-M1", () => {
+  const rows = [
+    // model X, T4: fixed 2/2 done+pass; candidate 1/2 done+pass
+    { task: "T4", repeat: 1, orchestratorModel: "X", orchestratorOutcome: "done", pass: true, reconMode: "fixed" },
+    { task: "T4", repeat: 2, orchestratorModel: "X", orchestratorOutcome: "done", pass: true, reconMode: "fixed" },
+    { task: "T4", repeat: 1, orchestratorModel: "X", orchestratorOutcome: "done", pass: true, reconMode: "candidate" },
+    { task: "T4", repeat: 2, orchestratorModel: "X", orchestratorOutcome: "escalate", pass: true, reconMode: "candidate" },
+    // rows with no candidate data are not reported
+    { task: "T4", repeat: 1, orchestratorModel: "claude", orchestratorOutcome: "done", pass: true, reconMode: "fixed" },
+  ];
+  const d = orchestratorReconDeltas(rows);
+  const x = d.find((r) => r.model === "X" && r.task === "T4");
+  assert.equal(x.candidatePassN, 0.5);
+  assert.equal(x.fixedPassN, 1);
+  assert.equal(x.delta, -0.5);
+  assert.ok(!d.some((r) => r.model === "claude"), "no candidate rows for claude -> not reported");
 });

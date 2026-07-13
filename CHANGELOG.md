@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-13
+
+### Added
+- **`orn skill-version`** — prints the bundled `ornith-loop` skill version (a new `version:`
+  field in `SKILL.md` frontmatter, kept in sync with `package.json` — a test enforces it) plus
+  any installed copies (`~/.claude/skills`, `~/.config/opencode/skills`), flagging mismatches
+  or `not installed`. Lets you tell which skill version is actually deployed vs shipped.
+- **Orchestrator M2 — delegated recon** (`bench.mjs orchestrate --recon candidate`): the
+  candidate assembles its own round-1 grounding from a deterministic fact-pool built by
+  `src/recon.js` (test command, file tree, `package.json`, goal-token grep hits + hit-file
+  source; task answer-keys excluded) via `orchestrator/recon-rubric.md` (facts, never steps),
+  then runs the unchanged M1 loop. New `bench.mjs recon --task <id>` prints the fact-pool.
+  Rows tag `reconMode: fixed|candidate` (default `fixed`, back-compat); `orchestrate-report`
+  partitions by mode and adds the candidate-M2-vs-own-M1 recon-delegation delta. Dry-runnable
+  via the `fake-pi` `# RECON ASSEMBLY` role.
+
 ## [0.4.0] - 2026-07-13
 
 ### Added
@@ -197,7 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`orn` CLI, `ornith-loop` skill, experiment journal).
 - Project documentation: `README.md`, `CHANGELOG.md`, `CLAUDE.md`.
 
-[Unreleased]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/giuseppeoncia/ornith-loop/compare/v0.1.0...v0.2.0

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { parseArgs, HELP } from "../src/args.js";
@@ -10,9 +11,10 @@ import { detectFlags } from "../src/flags.js";
 import { snapshot, diffSnapshots } from "../src/git.js";
 import { buildRecord, writeRecord } from "../src/record.js";
 import { formatSummary } from "../src/summary.js";
-import { detectHarnesses, resolveTargets, installSkill, ensureDefaultConfig, discoveryMessage } from "../src/install.js";
+import { detectHarnesses, resolveTargets, installSkill, ensureDefaultConfig, discoveryMessage, skillDirs } from "../src/install.js";
 import { loadConfig, configPath, setConfigKey, getConfigKey, KNOWN_KEYS } from "../src/config.js";
 import { runVerify } from "../src/verify.js";
+import { parseSkillVersion, formatSkillVersionReport } from "../src/skill-version.js";
 
 const parsed = parseArgs(process.argv.slice(2));
 if (parsed.help) {
@@ -59,6 +61,18 @@ if (options.command === "install-skill") {
     }
   } catch { /* ollama absent — omit the list */ }
   process.stdout.write(discoveryMessage(cfg, ollamaModels));
+  process.exit(0);
+}
+
+if (options.command === "skill-version") {
+  const bundledPath = fileURLToPath(new URL("../skill/ornith-loop/SKILL.md", import.meta.url));
+  const bundled = existsSync(bundledPath) ? parseSkillVersion(readFileSync(bundledPath, "utf8")) : null;
+  const dirs = skillDirs(process.env, homedir());
+  const installed = Object.entries(dirs).map(([name, dir]) => {
+    const p = join(dir, "ornith-loop", "SKILL.md");
+    return { name, version: existsSync(p) ? parseSkillVersion(readFileSync(p, "utf8")) : null };
+  });
+  process.stdout.write(formatSkillVersionReport({ bundled, installed }) + "\n");
   process.exit(0);
 }
 

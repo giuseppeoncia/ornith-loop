@@ -89,7 +89,10 @@ These are empirical, model-specific lessons — treat as grounding for any futur
   `pass`/`fail`/`uncertain` + a reason. Resolves the model from `--model`, else
   `verifier.model` when `verifier.enabled` (default off — Claude verifies inline until
   a verifier is configured).
-- `npm test` — run the test suite (`node --test`, zero deps, 102 tests).
+- `orn skill-version` — print the bundled `ornith-loop` skill version (the `version:` field in
+  `skill/ornith-loop/SKILL.md` frontmatter, kept in sync with `package.json`) plus any installed
+  copies (`~/.claude/skills`, `~/.config/opencode/skills`), flagging mismatches / `not installed`.
+- `npm test` — run the test suite (`node --test`, zero deps).
 
 No linter configured yet.
 
@@ -102,10 +105,12 @@ Release, and an npm publish, all driven by `.github/workflows/release.yml` on ta
 **Step 1 — on `develop`:** move `[Unreleased]` content to a new versioned section
 `[X.Y.Z] - YYYY-MM-DD`, leave `[Unreleased]` empty, and update the compare/tag link refs at
 the bottom of `CHANGELOG.md`. Bump `"version"` in `package.json` and the two `"version"`
-fields at the top of `package-lock.json` (root and `packages[""]`) to `X.Y.Z`. Commit and push:
+fields at the top of `package-lock.json` (root and `packages[""]`) to `X.Y.Z`. **Also bump the
+`version:` field in `skill/ornith-loop/SKILL.md` frontmatter to `X.Y.Z`** (a test enforces
+skill-version == package version; `orn skill-version` reports it). Commit and push:
 
 ```bash
-git add CHANGELOG.md package.json package-lock.json
+git add CHANGELOG.md package.json package-lock.json skill/ornith-loop/SKILL.md
 git commit -m "chore(release): X.Y.Z"
 git push origin develop
 ```

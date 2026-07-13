@@ -102,6 +102,22 @@ export function parseRoundDecision(text) {
   return esc("no parseable action; defaulting to escalate (route to Claude)");
 }
 
+// Parse the candidate's assembled round-1 grounding (M2 recon). Prefers a JSON
+// object { "grounding": "<facts>" }; falls back to the stripped plain/fenced body
+// so a model that just writes the facts still works. Blank -> { empty: true }.
+// Content is NOT sanitized here — whether it is "facts, not steps" is measured,
+// not enforced (docs/ORCHESTRATOR.md §5.1).
+export function parseGrounding(text) {
+  const raw = typeof text === "string" ? text : "";
+  const obj = extractJsonObject(raw);
+  if (obj && typeof obj.grounding === "string") {
+    const g = obj.grounding.trim();
+    return g ? { grounding: g, empty: false } : { grounding: "", empty: true };
+  }
+  const body = raw.replace(/```[a-zA-Z]*\n?/g, "").trim();
+  return body ? { grounding: body, empty: false } : { grounding: "", empty: true };
+}
+
 // Best-effort: parse the whole string, else the widest {...} slice (handles a
 // model that wraps JSON in prose or code fences). Shared shape with verifier.js.
 function extractJsonObject(text) {
@@ -225,6 +241,37 @@ export function orchestratorDeltas(rows, { baselineModel = "claude" } = {}) {
         delta: cand != null && base != null ? cand - base : null,
       });
     }
+  }
+  out.sort((a, b) => (a.task === b.task ? a.model.localeCompare(b.model) : a.task.localeCompare(b.task)));
+  return out;
+}
+
+// Recon-delegation delta (docs/ORCHESTRATOR.md M2): for each (task, model), the
+// candidate-assembled-recon pass@N minus the SAME model's fixed-recon (M1) pass@N.
+// pass@N = trueSuccess / repeats, as in orchestratorDeltas. Only (task, model)
+// pairs that have candidate rows are returned; fixedPassN is null if that model
+// has no fixed rows for the task (delta then null).
+export function orchestratorReconDeltas(rows) {
+  // `${task}::${model}` -> { task, model, fixed: cell, candidate: cell }
+  const cells = new Map();
+  const fresh = () => ({ repeats: new Set(), trueSuccess: 0 });
+  for (const r of rows) {
+    if (!r || r.orchestratorOutcome == null || r.task == null) continue;
+    const mode = r.reconMode === "candidate" ? "candidate" : "fixed";
+    const model = r.orchestratorModel || "(unknown)";
+    const k = `${r.task}::${model}`;
+    if (!cells.has(k)) cells.set(k, { task: r.task, model, fixed: fresh(), candidate: fresh() });
+    const cell = cells.get(k)[mode];
+    cell.repeats.add(r.repeat);
+    if (r.orchestratorOutcome === "done" && Boolean(r.pass)) cell.trueSuccess++;
+  }
+  const passN = (c) => (c.repeats.size ? c.trueSuccess / c.repeats.size : null);
+  const out = [];
+  for (const { task, model, fixed, candidate } of cells.values()) {
+    const cand = passN(candidate);
+    if (cand == null) continue; // only report where M2 data exists
+    const base = passN(fixed);
+    out.push({ task, model, candidatePassN: cand, fixedPassN: base, delta: base != null ? cand - base : null });
   }
   out.sort((a, b) => (a.task === b.task ? a.model.localeCompare(b.model) : a.task.localeCompare(b.task)));
   return out;

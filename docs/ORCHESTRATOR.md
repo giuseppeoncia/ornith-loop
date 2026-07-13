@@ -248,8 +248,14 @@ per (task, repeat). In M1 the recon is held fixed (round-1 grounding = the froze
 §11. The Phase-1 Claude-in-seat baseline was driven semi-manually and scored the same way
 (`orchestratorModel: "claude"`), the phasing `BENCHMARK.md` used.
 
-**Not yet built — M2:** delegating the *agentic recon* itself (deterministic extractors +
-candidate selects what to send as round-1 grounding, §6.2).
+**Built (M2, 2026-07-13):** `bench.mjs orchestrate --recon candidate` delegates the round-1
+recon — deterministic extractors (`src/recon.js`) build a fact-pool (test command, file tree,
+`package.json`, goal-token grep hits + the source of hit-files; answer-keys excluded), the
+candidate assembles round-1 grounding from it inline (`orchestrator/recon-rubric.md`,
+`parseGrounding`), and the M1 loop runs unchanged. `bench.mjs recon --task <id>` prints the
+fact-pool; `orchestrate-report` partitions by `reconMode` and shows the candidate-M2-vs-own-M1
+delta. Spec: `docs/superpowers/specs/2026-07-12-orchestrate-driver-m2-design.md`; results land
+in §11 once the run session completes.
 
 ## 10 · Success criteria for this experiment
 

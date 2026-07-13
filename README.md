@@ -85,6 +85,12 @@ orn install-skill --target opencode   # ~/.config/opencode/skills/ornith-loop
 It encodes the method: grounding recon → minimal-scaffold prompt → `orn` run → external
 verification → bounded corrective loop (default 3) → journal.
 
+Check which skill version is bundled vs installed:
+
+```bash
+orn skill-version   # bundled: 0.4.0 / claude: 0.4.0 / opencode: not installed
+```
+
 ### Configurable local verifier (optional)
 
 By default Claude verifies every run inline. If you've picked a local model as a safe
