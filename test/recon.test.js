@@ -100,3 +100,15 @@ test("extractRecon: per-file cap is byte-accurate for both line count and multi-
     rmSync(wd, { recursive: true, force: true });
   }
 });
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+test("recon-rubric.md exists and forbids step-by-step scaffold", () => {
+  const p = fileURLToPath(new URL("../orchestrator/recon-rubric.md", import.meta.url));
+  const txt = readFileSync(p, "utf8");
+  assert.match(txt, /grounding/i);
+  assert.match(txt, /\bfact/i);
+  assert.match(txt, /never|forbid|not.*(steps|plan)/i, "rubric must forbid step-by-step scaffold");
+  assert.match(txt, /"grounding"/, "rubric must request the { grounding } JSON shape");
+});
