@@ -67,7 +67,7 @@ export function extractRecon(workdir, goalText, { testCmd } = {}) {
   let grepTruncated = false;
   const hitFiles = new Set();
   outer: for (const token of goalTokens) {
-    for (const line of git(workdir, ["grep", "-n", "-F", token]).split("\n")) {
+    for (const line of git(workdir, ["grep", "-n", "-F", "-e", token, "--"]).split("\n")) {
       const m = line.match(/^([^:]+):(\d+):(.*)$/);
       if (!m) continue;
       const file = m[1];

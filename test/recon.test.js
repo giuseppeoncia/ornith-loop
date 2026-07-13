@@ -101,6 +101,49 @@ test("extractRecon: per-file cap is byte-accurate for both line count and multi-
   }
 });
 
+test("extractRecon: dash-prefixed goal tokens (e.g. --test) are searched via git grep -e, not dropped as an option", () => {
+  const wd = tempGitRepo({
+    "src/runner.mjs": "// invoke via: node --test\nexport function withTax(amount){return amount*1.2;}\n",
+  });
+  try {
+    const fp = extractRecon(
+      wd,
+      "Run the suite with `node --test`; it exercises `withTax`.",
+      { testCmd: ["node", "--test"] },
+    );
+    assert.ok(fp.goalTokens.includes("--test"), `expected --test in goal tokens: ${JSON.stringify(fp.goalTokens)}`);
+    assert.ok(
+      fp.grepHits.some((h) => h.token === "--test"),
+      `expected a grep hit for token "--test": ${JSON.stringify(fp.grepHits)}`,
+    );
+    assert.ok(
+      fp.sourceOfHitFiles.some((s) => s.file === "src/runner.mjs"),
+      `expected src/runner.mjs in sourceOfHitFiles: ${JSON.stringify(fp.sourceOfHitFiles.map((s) => s.file))}`,
+    );
+  } finally {
+    rmSync(wd, { recursive: true, force: true });
+  }
+});
+
+test("extractRecon: byte cap that lands mid-character strips the trailing replacement char and still holds", () => {
+  // "XX" (2 ASCII bytes) + 10000x "★" (3 bytes each): (16384 - 2) % 3 !== 0, so the
+  // 16384-byte cut splits a multi-byte "★" mid-character, exercising the replace(/�+$/, "") branch.
+  const wideContent = "MidCutToken XX" + "★".repeat(10000) + "\n";
+  const wd = tempGitRepo({ "src/midcut.txt": wideContent });
+  try {
+    const fp = extractRecon(wd, "Find `MidCutToken`.", { testCmd: "node --test" });
+    const entry = fp.sourceOfHitFiles.find((s) => s.file === "src/midcut.txt");
+    assert.ok(entry, "expected src/midcut.txt in sourceOfHitFiles");
+    assert.equal(entry.truncated, true);
+    assert.ok(
+      Buffer.byteLength(entry.content, "utf8") <= 16 * 1024,
+      `byte cap must hold after stripping partial char: got ${Buffer.byteLength(entry.content, "utf8")} bytes`,
+    );
+  } finally {
+    rmSync(wd, { recursive: true, force: true });
+  }
+});
+
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
