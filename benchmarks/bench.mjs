@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
 import { buildEvidencePacket, parseVerdict, scoreVerifier, corpusRecordFrom } from "../src/verifier.js";
-import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision, parseGrounding } from "../src/orchestrator.js";
+import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision, parseGrounding, orchestratorReconDeltas } from "../src/orchestrator.js";
 import { gatherEvidence } from "../src/evidence.js";
 import { loadConfig } from "../src/config.js";
 import { extractRecon, renderFactPool } from "../src/recon.js";
@@ -305,26 +305,37 @@ function cmdOrchestrateReport(o) {
   const rows = loadRows().filter((r) => r.orchestratorOutcome);
   if (!rows.length) return process.stdout.write("no orchestrator results yet (see `orchestrate` and docs/ORCHESTRATOR.md)\n");
   const baselineModel = typeof o.baseline === "string" ? o.baseline : "claude";
-  const scored = scoreOrchestrator(rows);
+  const modeOf = (r) => (r.reconMode === "candidate" ? "candidate" : "fixed");
 
-  process.stdout.write("\nOrchestrator vs oracle (sorted safest-first)\n");
-  process.stdout.write("model                          n  autoPass  falseSucc  effFS  escalate\n");
-  for (const s of scored) {
-    process.stdout.write(
-      `${String(s.model).padEnd(28)} ${String(s.n).padStart(3)}  ${pct(s.autonomousPassRate)}    ${pct(s.falseSuccessRate)}   ${pct(s.effectiveFalseSuccess)}   ${pct(s.escalationRate)}\n`
-    );
-  }
-
-  const dl = orchestratorDeltas(rows, { baselineModel });
-  if (dl.length) {
-    process.stdout.write(`\nPer-task pass@N delta vs baseline '${baselineModel}' (positive = candidate matches/beats Claude)\n`);
-    process.stdout.write("task            model                    passN  baseN   delta\n");
-    for (const d of dl) {
+  for (const mode of ["fixed", "candidate"]) {
+    const sub = rows.filter((r) => modeOf(r) === mode);
+    if (!sub.length) continue;
+    process.stdout.write(`\n== recon: ${mode} ${mode === "fixed" ? "(M1 — gold grounding)" : "(M2 — candidate-assembled)"} ==\n`);
+    process.stdout.write("model                          n  autoPass  falseSucc  effFS  escalate\n");
+    for (const s of scoreOrchestrator(sub)) {
       process.stdout.write(
-        `${d.task.padEnd(15)} ${String(d.model).padEnd(24)} ${pct(d.autonomousPassN)}  ${pct(d.baselinePassN)}  ${signed(d.delta)}\n`
+        `${String(s.model).padEnd(28)} ${String(s.n).padStart(3)}  ${pct(s.autonomousPassRate)}    ${pct(s.falseSuccessRate)}   ${pct(s.effectiveFalseSuccess)}   ${pct(s.escalationRate)}\n`
       );
     }
+    const dl = orchestratorDeltas(sub, { baselineModel });
+    if (dl.length) {
+      process.stdout.write(`\nPer-task pass@N delta vs baseline '${baselineModel}' (positive = candidate matches/beats Claude)\n`);
+      process.stdout.write("task            model                    passN  baseN   delta\n");
+      for (const d of dl) {
+        process.stdout.write(`${d.task.padEnd(15)} ${String(d.model).padEnd(24)} ${pct(d.autonomousPassN)}  ${pct(d.baselinePassN)}  ${signed(d.delta)}\n`);
+      }
+    }
   }
+
+  const rd = orchestratorReconDeltas(rows);
+  if (rd.length) {
+    process.stdout.write("\nRecon-delegation delta — candidate-M2 pass@N vs the SAME model's fixed-M1 (negative = cost of self-assembled recon)\n");
+    process.stdout.write("task            model                    M2     M1     delta\n");
+    for (const d of rd) {
+      process.stdout.write(`${d.task.padEnd(15)} ${String(d.model).padEnd(24)} ${pct(d.candidatePassN)}  ${pct(d.fixedPassN)}  ${signed(d.delta)}\n`);
+    }
+  }
+
   process.stdout.write(
     "\neffFS = false-success among 'done' calls (the safety metric; want ≈0)\n" +
       "autoPass = loops the orchestrator finished itself and the oracle confirmed\n" +

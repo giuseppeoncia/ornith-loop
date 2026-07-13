@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { OUTCOMES, parseOrchestratorOutcome, scoreOrchestrator, orchestratorDeltas, ROUND_ACTIONS, parseRoundDecision, parseGrounding } from "../src/orchestrator.js";
+import {
+  OUTCOMES,
+  parseOrchestratorOutcome,
+  scoreOrchestrator,
+  orchestratorDeltas,
+  ROUND_ACTIONS,
+  parseRoundDecision,
+  parseGrounding,
+  orchestratorReconDeltas,
+} from "../src/orchestrator.js";
 
 test("OUTCOMES is the closed set", () => {
   assert.deepEqual(OUTCOMES, ["done", "escalate"]);
@@ -169,4 +178,22 @@ test("parseGrounding: empty / whitespace / non-string -> empty", () => {
   assert.deepEqual(parseGrounding("   \n"), { grounding: "", empty: true });
   assert.deepEqual(parseGrounding(null), { grounding: "", empty: true });
   assert.deepEqual(parseGrounding('{"grounding":"   "}'), { grounding: "", empty: true });
+});
+
+test("orchestratorReconDeltas: candidate-M2 pass@N minus same model's fixed-M1", () => {
+  const rows = [
+    // model X, T4: fixed 2/2 done+pass; candidate 1/2 done+pass
+    { task: "T4", repeat: 1, orchestratorModel: "X", orchestratorOutcome: "done", pass: true, reconMode: "fixed" },
+    { task: "T4", repeat: 2, orchestratorModel: "X", orchestratorOutcome: "done", pass: true, reconMode: "fixed" },
+    { task: "T4", repeat: 1, orchestratorModel: "X", orchestratorOutcome: "done", pass: true, reconMode: "candidate" },
+    { task: "T4", repeat: 2, orchestratorModel: "X", orchestratorOutcome: "escalate", pass: true, reconMode: "candidate" },
+    // rows with no candidate data are not reported
+    { task: "T4", repeat: 1, orchestratorModel: "claude", orchestratorOutcome: "done", pass: true, reconMode: "fixed" },
+  ];
+  const d = orchestratorReconDeltas(rows);
+  const x = d.find((r) => r.model === "X" && r.task === "T4");
+  assert.equal(x.candidatePassN, 0.5);
+  assert.equal(x.fixedPassN, 1);
+  assert.equal(x.delta, -0.5);
+  assert.ok(!d.some((r) => r.model === "claude"), "no candidate rows for claude -> not reported");
 });
