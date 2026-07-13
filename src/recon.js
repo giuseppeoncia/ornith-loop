@@ -86,7 +86,14 @@ export function extractRecon(workdir, goalText, { testCmd } = {}) {
     let truncated = false;
     const lines = content.split("\n");
     if (lines.length > MAX_FILE_LINES) { content = lines.slice(0, MAX_FILE_LINES).join("\n"); truncated = true; }
-    if (Buffer.byteLength(content, "utf8") > MAX_FILE_BYTES) { content = content.slice(0, MAX_FILE_BYTES); truncated = true; }
+    const fullBytes = Buffer.from(content, "utf8");
+    if (fullBytes.length > MAX_FILE_BYTES) {
+      // Truncate by BYTES (not UTF-16 code units), then decode and drop any trailing
+      // replacement char(s) left by a multi-byte sequence cut mid-character, so the
+      // result's UTF-8 byte length is guaranteed <= MAX_FILE_BYTES.
+      content = fullBytes.subarray(0, MAX_FILE_BYTES).toString("utf8").replace(/�+$/, "");
+      truncated = true;
+    }
     sourceOfHitFiles.push({ file, content, truncated });
   }
   sourceOfHitFiles.sort((a, b) => a.file.localeCompare(b.file));

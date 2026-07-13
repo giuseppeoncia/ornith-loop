@@ -68,3 +68,35 @@ test("extractRecon: gathers tree/grep/source, excludes answer-keys", () => {
     rmSync(wd, { recursive: true, force: true });
   }
 });
+
+test("extractRecon: per-file cap is byte-accurate for both line count and multi-byte content", () => {
+  // Only the first line carries the goal token: keeps this file's grep-hit count low so it
+  // doesn't exhaust MAX_GREP_HITS before the wide-content file's token is even reached.
+  const longAsciiLines =
+    ["LongFileToken marker"].concat(Array.from({ length: 499 }, (_, i) => `filler line ${i}`)).join("\n") + "\n";
+  // ~10000 wide chars: char length < 16384 but UTF-8 byte length (3 bytes each for U+2605) >> 16384.
+  const wideContent = "WideToken " + "★".repeat(10000) + "\n";
+  const wd = tempGitRepo({
+    "src/long.txt": longAsciiLines,
+    "src/wide.txt": wideContent,
+  });
+  try {
+    const fp = extractRecon(wd, "Find `LongFileToken` and `WideToken`.", { testCmd: "node --test" });
+
+    const longEntry = fp.sourceOfHitFiles.find((s) => s.file === "src/long.txt");
+    assert.ok(longEntry, "expected src/long.txt in sourceOfHitFiles");
+    assert.equal(longEntry.truncated, true);
+    assert.ok(longEntry.content.split("\n").length <= 400, "line-capped content must have <= 400 lines");
+
+    const wideEntry = fp.sourceOfHitFiles.find((s) => s.file === "src/wide.txt");
+    assert.ok(wideEntry, "expected src/wide.txt in sourceOfHitFiles");
+    assert.ok(wideEntry.content.length < 16384, "sanity: char length is under the byte cap");
+    assert.equal(wideEntry.truncated, true, "byte cap must trigger for wide multi-byte content");
+    assert.ok(
+      Buffer.byteLength(wideEntry.content, "utf8") <= 16 * 1024,
+      `byte cap must actually hold: got ${Buffer.byteLength(wideEntry.content, "utf8")} bytes`,
+    );
+  } finally {
+    rmSync(wd, { recursive: true, force: true });
+  }
+});
