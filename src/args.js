@@ -13,7 +13,14 @@ export function parseArgs(argv) {
   if (command === "install-skill") return parseInstall(argv.slice(1));
   if (command === "config") return parseConfig(argv.slice(1));
   if (command === "verify") return parseVerify(argv.slice(1));
-  return { error: `unknown command '${command}': expected 'run' or 'install-skill'` };
+  if (command === "skill-version") return parseSkillVersionCmd(argv.slice(1));
+  return { error: `unknown command '${command}': expected 'run', 'install-skill', 'config', 'verify', or 'skill-version'` };
+}
+
+function parseSkillVersionCmd(args) {
+  if (args[0] === "-h" || args[0] === "--help") return { help: true };
+  if (args.length) return { error: `skill-version takes no arguments (got '${args[0]}')` };
+  return { options: { command: "skill-version" } };
 }
 
 function parseRun(args) {
@@ -126,6 +133,7 @@ Commands:
   install-skill      install the ornith-loop skill into your coding agent(s)
   config <get|set|path>  read/write ~/.config/ornith-loop/config.json (verifier, executor, rounds)
   verify                 run the configured local verifier over a workdir (prints pass|fail|uncertain)
+  skill-version          print the bundled ornith-loop skill version + any installed copies
 
 orn run <prompt> [options]
   --prompt-file <path>   read the prompt from a file (instead of a positional)

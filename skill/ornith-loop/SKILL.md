@@ -2,6 +2,7 @@
 name: ornith-loop
 description: Use when driving a self-scaffolding local model (ornith 1.0 first) under the pi harness via the `orn` CLI — gather grounding, author a MINIMAL-scaffold prompt, run, verify externally, loop with more grounding (not scaffold), and journal. Use for "run this task on ornith", "have the local model do X", or comparing local models under pi.
 license: Apache-2.0
+version: 0.3.0
 ---
 
 # ornith-loop

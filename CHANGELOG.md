@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2026-07-13
 
 ### Added
+- **`orn skill-version`** — prints the bundled `ornith-loop` skill version (a new `version:`
+  field in `SKILL.md` frontmatter, kept in sync with `package.json` — a test enforces it) plus
+  any installed copies (`~/.claude/skills`, `~/.config/opencode/skills`), flagging mismatches
+  or `not installed`. Lets you tell which skill version is actually deployed vs shipped.
 - **Orchestrator M2 — delegated recon** (`bench.mjs orchestrate --recon candidate`): the
   candidate assembles its own round-1 grounding from a deterministic fact-pool built by
   `src/recon.js` (test command, file tree, `package.json`, goal-token grep hits + hit-file
