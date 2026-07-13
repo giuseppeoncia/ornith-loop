@@ -26,6 +26,7 @@ import { buildEvidencePacket, parseVerdict, scoreVerifier, corpusRecordFrom } fr
 import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision } from "../src/orchestrator.js";
 import { gatherEvidence } from "../src/evidence.js";
 import { loadConfig } from "../src/config.js";
+import { extractRecon, renderFactPool } from "../src/recon.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ORN = resolve(HERE, "..", "bin", "orn.js");
@@ -457,6 +458,19 @@ function cmdVerifyCorpus(o) {
   }
 }
 
+// Print the deterministic recon fact-pool for a task (docs/ORCHESTRATOR.md §6.2).
+// Read-only; used for transparency and to feed the semi-manual Claude-M2 ceiling.
+function cmdRecon(o) {
+  const task = o.task || die("--task required");
+  const t = loadTask(task);
+  const wd = makeWorkdir(t);
+  try {
+    process.stdout.write(renderFactPool(extractRecon(wd, t.parts.goal, { testCmd: t.meta.testCmd })) + "\n");
+  } finally {
+    rmSync(wd, { recursive: true, force: true });
+  }
+}
+
 const argv = process.argv.slice(2);
 const cmd = argv[0];
 const opts = parseFlags(argv.slice(1));
@@ -466,6 +480,7 @@ else if (cmd === "verify-report") cmdVerifyReport();
 else if (cmd === "orchestrate") cmdOrchestrate(opts);
 else if (cmd === "orchestrate-report") cmdOrchestrateReport(opts);
 else if (cmd === "verify-corpus") cmdVerifyCorpus(opts);
+else if (cmd === "recon") cmdRecon(opts);
 else {
   process.stdout.write(
     "usage: node benchmarks/bench.mjs run --task <id> --arm <A|B1|B2|B3> [--repeats N] [--model id] [--verifier-model id] [--save-corpus dir] [--results-dir path] [--round N --extra file --repeat K]\n" +
@@ -473,7 +488,8 @@ else {
       "       node benchmarks/bench.mjs report\n" +
       "       node benchmarks/bench.mjs verify-report\n" +
       "       node benchmarks/bench.mjs orchestrate --task <id> --orchestrator-model <id> [--verifier-model <id>] [--repeats N] [--rounds N] [--results-dir path]\n" +
-      "       node benchmarks/bench.mjs orchestrate-report [--baseline <model>]\n"
+      "       node benchmarks/bench.mjs orchestrate-report [--baseline <model>]\n" +
+      "       node benchmarks/bench.mjs recon --task <id>\n"
   );
   process.exit(cmd ? 2 : 0);
 }

@@ -112,3 +112,14 @@ test("recon-rubric.md exists and forbids step-by-step scaffold", () => {
   assert.match(txt, /never|forbid|not.*(steps|plan)/i, "rubric must forbid step-by-step scaffold");
   assert.match(txt, /"grounding"/, "rubric must request the { grounding } JSON shape");
 });
+
+import { execFileSync } from "node:child_process";
+
+test("bench.mjs recon prints a fact-pool for a real task, no answer-keys", () => {
+  const bench = fileURLToPath(new URL("../benchmarks/bench.mjs", import.meta.url));
+  const out = execFileSync(process.execPath, [bench, "recon", "--task", "T6-inplace-hard"], { encoding: "utf8" });
+  assert.match(out, /# RECON FACT-POOL/);
+  assert.match(out, /withTax/);
+  assert.match(out, /Test command/);
+  assert.doesNotMatch(out, /allowedChangedFiles/);
+});
