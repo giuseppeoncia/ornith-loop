@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 const mode = process.env.FAKE_PI_MODE || "success";
 const isVerifierCall = process.argv.some((a) => typeof a === "string" && a.includes("# EVIDENCE PACKET"));
 const isOrchestratorCall = process.argv.some((a) => typeof a === "string" && a.includes("# ORCHESTRATOR DECISION"));
+const isReconCall = process.argv.some((a) => typeof a === "string" && a.includes("# RECON ASSEMBLY"));
 
 if (mode === "crash") {
   process.stderr.write("boom\n");
@@ -20,6 +21,18 @@ if (mode === "crash") {
   setInterval(() => {}, 1000); // never exits
 } else if (mode === "utf8") {
   process.stdout.write("ornith → café ✅ 日本語 🐦\n");
+  process.exit(0);
+} else if (isReconCall) {
+  const text = process.env.FAKE_PI_RECON_EMPTY === "1"
+    ? ""
+    : JSON.stringify({ grounding: process.env.FAKE_PI_GROUNDING || "- Change only files the tests reference; run `node --test`." });
+  const msg = { role: "assistant", stopReason: "stop", content: [{ type: "text", text }] };
+  const lines = [
+    { type: "session", version: 3, id: "44444444-4444-4444-4444-444444444444", timestamp: "2026-07-07T16:50:00.000Z", cwd: "/tmp/recon" },
+    { type: "agent_start" },
+    { type: "agent_end", messages: [msg] },
+  ];
+  process.stdout.write(lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
   process.exit(0);
 } else if (isOrchestratorCall) {
   const action = process.env.FAKE_PI_ACTION || "done";

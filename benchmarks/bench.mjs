@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { ARMS, ARM_IDS, assemblePrompt, aggregate, deltas, caffeinateArgs } from "../src/bench.js";
 import { buildEvidencePacket, parseVerdict, scoreVerifier, corpusRecordFrom } from "../src/verifier.js";
-import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision } from "../src/orchestrator.js";
+import { scoreOrchestrator, orchestratorDeltas, parseRoundDecision, parseGrounding } from "../src/orchestrator.js";
 import { gatherEvidence } from "../src/evidence.js";
 import { loadConfig } from "../src/config.js";
 import { extractRecon, renderFactPool } from "../src/recon.js";
@@ -34,6 +34,7 @@ const TASKS_DIR = join(HERE, "tasks");
 const RESULTS_DIR = join(HERE, "results");
 const RUBRIC_PATH = resolve(HERE, "..", "verifier", "rubric.md");
 const ORCH_RUBRIC_PATH = resolve(HERE, "..", "orchestrator", "rubric.md");
+const ORCH_RECON_RUBRIC_PATH = resolve(HERE, "..", "orchestrator", "recon-rubric.md");
 
 function die(msg) {
   process.stderr.write(`bench: ${msg}\n`);
@@ -337,6 +338,20 @@ function cmdOrchestrateReport(o) {
 // only the per-round decision (done/retry/escalate) + the corrective grounding fact.
 // Presidia: Layer-0 oracle scores post-hoc and is never shown to the candidate; the
 // Layer-1 verifier is a separate model. One row per (task, repeat).
+// M2: the candidate assembles round-1 grounding from the deterministic fact-pool.
+// Read-only, inline (--no-tools). Returns { grounding, empty } (parseGrounding).
+function assembleRecon({ task, goal, factPoolText, model }) {
+  const rubric = readFileSync(ORCH_RECON_RUBRIC_PATH, "utf8");
+  const prompt = `${rubric}\n\n---\n\n# RECON ASSEMBLY\n\n## GOAL\n${(goal || "").trim()}\n\n${factPoolText}`;
+  const runsDir = mkdtempSync(join(tmpdir(), "bench-orch-recon-"));
+  try {
+    const dec = runOrn({ prompt, model, label: `${task}-orch-recon`, runsDir, noTools: true });
+    return parseGrounding(dec.record?.finalText || "");
+  } finally {
+    rmSync(runsDir, { recursive: true, force: true });
+  }
+}
+
 function cmdOrchestrate(o) {
   const task = o.task || die("--task required");
   const orchestratorModel = typeof o["orchestrator-model"] === "string" ? o["orchestrator-model"] : die("--orchestrator-model <id> required");
@@ -350,12 +365,27 @@ function cmdOrchestrate(o) {
   const t = loadTask(task);
   keepAwake();
   mkdirSync(resultsDir, { recursive: true });
+  const reconMode = o.recon === "candidate" ? "candidate" : "fixed";
   const slug = orchestratorModel.replace(/[^a-zA-Z0-9]+/g, "-");
-  const resultsFile = join(resultsDir, `${task}__orch-${slug}.jsonl`);
+  const resultsFile = join(resultsDir, `${task}__orch-${slug}${reconMode === "candidate" ? "-recon" : ""}.jsonl`);
   const rubric = readFileSync(ORCH_RUBRIC_PATH, "utf8");
 
   for (const repeat of repeats) {
-    let grounding = (t.parts.grounding || "").trim(); // recon FIXED in M1
+    let reconGrounding = null;
+    let reconEmpty = false;
+    let grounding;
+    if (reconMode === "candidate") {
+      const reconWd = makeWorkdir(t);
+      let factPoolText;
+      try { factPoolText = renderFactPool(extractRecon(reconWd, t.parts.goal, { testCmd: t.meta.testCmd })); }
+      finally { rmSync(reconWd, { recursive: true, force: true }); }
+      const r = assembleRecon({ task, goal: t.parts.goal, factPoolText, model: orchestratorModel });
+      reconGrounding = r.grounding;
+      reconEmpty = r.empty;
+      grounding = r.grounding || "";
+    } else {
+      grounding = (t.parts.grounding || "").trim(); // recon FIXED in M1
+    }
     let outcome = "escalate";
     let reason = "";
     let roundsUsed = 0;
@@ -411,6 +441,8 @@ function cmdOrchestrate(o) {
       const row = {
         task, repeat, orchestratorModel, orchestratorOutcome: outcome,
         pass: oracle.pass, orchestratorRounds: roundsUsed, orchestratorReason: reason, verifierModel,
+        reconMode,
+        ...(reconMode === "candidate" ? { reconGrounding, reconEmpty } : {}),
       };
       appendFileSync(resultsFile, JSON.stringify(row) + "\n");
       process.stdout.write(`${task}-orch-k${repeat}: ${outcome} (rounds ${roundsUsed}, oracle ${oracle.pass ? "PASS" : "fail"})\n`);
@@ -487,7 +519,7 @@ else {
       "       node benchmarks/bench.mjs verify-corpus --corpus <dir> --verifier-model <id> [--results-dir path]\n" +
       "       node benchmarks/bench.mjs report\n" +
       "       node benchmarks/bench.mjs verify-report\n" +
-      "       node benchmarks/bench.mjs orchestrate --task <id> --orchestrator-model <id> [--verifier-model <id>] [--repeats N] [--rounds N] [--results-dir path]\n" +
+      "       node benchmarks/bench.mjs orchestrate --task <id> --orchestrator-model <id> [--recon fixed|candidate] [--verifier-model <id>] [--repeats N] [--rounds N] [--results-dir path]\n" +
       "       node benchmarks/bench.mjs orchestrate-report [--baseline <model>]\n" +
       "       node benchmarks/bench.mjs recon --task <id>\n"
   );

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
@@ -40,6 +40,26 @@ test("orchestrate: dry-run via fake-pi emits one schema-correct row (no ollama)"
     assert.equal(r.verifierModel, "fake-verifier");
     assert.equal(typeof r.pass, "boolean");          // oracle ran (false: fake-pi doesn't solve)
     assert.equal(typeof r.orchestratorReason, "string");
+  } finally {
+    rmSync(resultsDir, { recursive: true, force: true });
+  }
+});
+
+test("orchestrate --recon candidate: dry-run emits one reconMode:candidate row", () => {
+  const bench = fileURLToPath(new URL("../benchmarks/bench.mjs", import.meta.url));
+  const fakePi = fileURLToPath(new URL("./fixtures/fake-pi.js", import.meta.url));
+  const resultsDir = mkdtempSync(join(tmpdir(), "orch-m2-"));
+  try {
+    execFileSync(process.execPath,
+      [bench, "orchestrate", "--task", "T4-additive-hard", "--repeats", "1",
+       "--orchestrator-model", "fake", "--recon", "candidate", "--results-dir", resultsDir],
+      { encoding: "utf8", env: { ...process.env, ORN_PI_BIN: fakePi, FAKE_PI_ACTION: "done" } });
+    const file = join(resultsDir, "T4-additive-hard__orch-fake-recon.jsonl");
+    const rows = readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].reconMode, "candidate");
+    assert.equal(rows[0].orchestratorOutcome, "done");
+    assert.equal(typeof rows[0].reconGrounding, "string");
   } finally {
     rmSync(resultsDir, { recursive: true, force: true });
   }
