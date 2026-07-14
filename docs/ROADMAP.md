@@ -20,7 +20,8 @@ there.
 | Orchestrator **Phase-1 baseline** (Claude-in-seat, `journal/2026-07-12-orchestrator-selection.md`) | done — K=5 on T6+T4: pass@N 100%, effFS 0%; `orchestrate-report` validated |
 | Orchestrator **agentic execution driver** (`bench.mjs orchestrate`, M1) | **built + validated on real ollama** (2026-07-12) |
 | Orchestrator **candidate sweep — M1 (fixed recon)** (`journal/2026-07-12-orchestrator-selection-2.md`, `ORCHESTRATOR.md §11.1`) | **done** — 5 candidates + Claude baseline, K=5 × T6/T4. **effFS = 0 % for all**; `llama3.1:8b` (~4.9 GB) and `qwen3:14b` match Claude exactly; `gemma4:12b` weakest (80% autoPass) |
-| Orchestrator **candidate sweep — M2 (delegated recon)** (`journal/2026-07-13-orchestrator-selection-3.md`, `ORCHESTRATOR.md §11.2`) | **done** — llama3.1:8b/qwen3:14b/gemma4:12b, K=5 × T6/T4, candidate assembles round-1 grounding. **effFS = 0 % for all**; delegating recon costs ~20 pp autonomy (heaviest on T4-additive: scope fact dropped), safety intact. Pending: Claude-M2 ceiling (semi-manual); next M3 = agentic Read/Grep/Bash recon |
+| Orchestrator **candidate sweep — M2 (delegated recon)** (`journal/2026-07-13-orchestrator-selection-3.md`, `ORCHESTRATOR.md §11.2`) | **done** — llama3.1:8b/qwen3:14b/gemma4:12b, K=5 × T6/T4, candidate assembles round-1 grounding. **effFS = 0 % for all**; delegating recon costs ~20 pp autonomy (heaviest on T4-additive: scope fact dropped), safety intact. |
+| Orchestrator **Claude-M2 ceiling** (semi-manual, loop-driven; `journal/2026-07-13-orchestrator-selection-3.md §Addendum`, `ORCHESTRATOR.md §11.2`) | **done (2026-07-14)** — Claude in recon + decision seats, full corrective loop, K=5 × T6/T4. **100 % autoPass, effFS 0 %, escalate 0 % — recon-delegation cost 0 %** (= fixed-recon M1). Fact-pools are sufficient → the candidate ~20 pp drop is model accuracy, not a harness gap; the corrective loop lifts round-1 7/10 → 10/10. A single-shot (no-loop) first attempt was scrapped as non-comparable. |
 
 All of the above is committed and pushed to
 `origin/claude/lightweight-orchestrator-analysis-v9m7kc`.
@@ -93,9 +94,17 @@ breaches safety**. Ordering preserved but compressed. (`ORCHESTRATOR.md §11.2`,
 `journal/2026-07-13-orchestrator-selection-3.md`.) Durability held even through a **power cut**
 (laptop ran on battery; daemon in its own session survived).
 
-**Next:** (1) semi-manual **Claude-M2 ceiling** (assembly upper bound); (2) tighten
-`parseGrounding`/rubric for the `{grounding}`-array quirk; (3) **M3** — candidate drives *agentic*
-recon (Read/Grep/Bash), where function-calling finally becomes load-bearing (§6.2).
+**Claude-M2 ceiling (2026-07-14, semi-manual, loop-driven): done.** Claude in the recon + decision
+seats, full corrective loop, K=5 × {T6, T4}: **100 % autoPass, effFS 0 %, escalate 0 % — recon-
+delegation cost 0 %** (identical to fixed-recon M1). Confirms the candidate ~20 pp M2 drop is
+*assembly accuracy*, not a fact-pool/harness gap (both pools carry all gold grounding), and that
+the *corrective loop* is what delivers pass@N (round-1 clean 7/10 → 10/10; a scrapped single-shot
+attempt scored 20 %/60 % from round-1 flakiness alone). (`ORCHESTRATOR.md §11.2`,
+`journal/2026-07-13-orchestrator-selection-3.md §Addendum`.)
+
+**Next:** (1) tighten `parseGrounding`/rubric for the `{grounding}`-array quirk; (2) **M3** —
+candidate drives *agentic* recon (Read/Grep/Bash), where function-calling finally becomes
+load-bearing (§6.2).
 
 ### 3 · PARALLEL — verifier follow-ups (independent of the orchestrator work)
 Already annotated in `journal/2026-07-10-verifier-selection.md` ("Recommended next steps" /

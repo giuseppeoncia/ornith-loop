@@ -122,21 +122,97 @@ the grounding stayed **facts, not steps** — the nest was not stolen.
 - **`effFS = 0` is on this suite** and, as in M1, partly structural (the reliable Layer-1 verifier
   gates `done`). The empirical result that matters is that self-assembled recon did **not** induce
   a single false success.
-- **Claude-M2 ceiling not yet run.** The semi-manual Claude-in-seat, candidate-recon baseline
-  (Claude assembles grounding from the same `bench.mjs recon` fact-pool, then drives the loop by
-  hand) is still pending — so the "vs claude" delta in the candidate partition shows `—`. The
-  candidate-M2-vs-own-M1 delta above is the meaningful comparison for now.
+- **Claude-M2 ceiling now run** (2026-07-14 addendum below). The semi-manual Claude-in-seat,
+  candidate-recon baseline — Claude assembles grounding from the same `bench.mjs recon`
+  fact-pool, then drives the full corrective loop by hand — is complete, so the "vs claude"
+  delta in the candidate partition is now populated. A **first single-shot attempt (1 round, no
+  loop) was scrapped** as non-comparable to the K=5 loop-driven M1/M2 candidate numbers: it
+  scored 20 %/60 % purely from ornith's round-1 flakiness, not grounding quality.
 - **Ran through a power cut.** Mains (and the network) dropped mid-sweep; the MacBook continued on
   **battery** and the daemon (own session, `caffeinate`) ran to completion uninterrupted — the
   run-durability pattern from M1 held even against a power event. Harness-tracked watcher tasks
   were repeatedly reaped; the detached daemon + on-disk rows were the source of truth.
 
-## Status: M2 candidate sweep COMPLETE — next
+## Addendum (2026-07-14) — the Claude-M2 ceiling (loop-driven)
 
-- M2 candidate sweep (llama3.1:8b, qwen3:14b, gemma4:12b) **done**; distilled into
-  `docs/ORCHESTRATOR.md §11`. Rows in the gitignored `benchmarks/results/*-recon.jsonl` (the
-  tables here are the durable record).
-- **Next:** (1) the **Claude-M2 ceiling** (semi-manual) to bound how well the assembly task can be
-  done at all; (2) tighten `parseGrounding`/rubric for the array-format quirk; (3) **M3** — let the
+The upper bound of the recon-assembly task: **how well can round-1 grounding be assembled from
+the fact-pool at all**, done right (Claude in the recon seat AND the decision seat, driving the
+full corrective loop — not the scrapped single-shot). Same host/executor/verifier/tasks/K as
+above; Layer-0 oracle hidden during the loop, applied post-hoc as the gold label. A throwaway
+harness owned only the mechanical glue (fresh workdir from template → `orn run` → gather
+evidence → `qwen3.5:4b` verify); **every grounding and every done/retry/escalate decision was
+Claude's**, from ground-truth evidence — mirroring the M1 Claude baseline method.
+
+```
+model (M2 candidate-recon)  n  autoPass  effFS  escalate   vs own fixed-M1
+claude                     10  100%      0%     0%         100% → 100%  (recon-delegation cost = 0)
+llama3.1:8b                10   80%      0%     20%        100% →  80%
+qwen3:14b                  10   80%      0%     20%        100% →  80%
+gemma4:12b                 10   60%      0%     40%         80% →  60%
+
+Per-task pass@N delta vs the CLAUDE ceiling (now populated), candidate mode:
+task              model        passN  ceiling  delta
+T4-additive-hard  claude       100%   100%       —   (the ceiling)
+T4-additive-hard  llama3.1:8b   60%   100%    -40%
+T4-additive-hard  qwen3:14b     80%   100%    -20%
+T4-additive-hard  gemma4:12b    60%   100%    -40%
+T6-inplace-hard   claude       100%   100%       —
+T6-inplace-hard   llama3.1:8b  100%   100%      0%
+T6-inplace-hard   qwen3:14b     80%   100%    -20%
+T6-inplace-hard   gemma4:12b    60%   100%    -40%
+```
+
+**Per-repeat (oracle gold label):**
+
+```
+              T4-additive-hard                             T6-inplace-hard
+claude   k1 done·r2·P  k2 done·r1·P  k3 done·r1·P   k1 done·r2·P  k2 done·r2·P  k3 done·r1·P
+         k4 done·r1·P  k5 done·r1·P                 k4 done·r1·P  k5 done·r1·P
+```
+
+**Findings.**
+
+1. **Ceiling = 100 % autoPass on both hard tasks, effFS 0 %, escalate 0 %** — identical to the
+   Claude fixed-recon M1 baseline. **The recon-delegation cost for a capable assembler is 0 %**
+   (T4 and T6 both M2 100 % = M1 100 %). Assembling round-1 grounding from the deterministic
+   fact-pool, done well, loses nothing versus receiving the hand-authored gold `grounding.md`.
+2. **So the candidates' ~20 pp M2 drop is model accuracy, not a fact-pool/harness gap.** Reading
+   both fact-pools directly confirms they contain all the gold grounding: for **T4** the pool
+   prints the entire `registry.mjs` (the `OPS` map + `evaluate`) and `ops.mjs`, so "register
+   `pow` in `OPS`" is fully derivable; for **T6** it prints `pricing.mjs` (with `roundCents`
+   byte-exact and the hardcoded `0.2`), both `checkout.mjs` call sites, and the test file (the
+   2-arg `withTax` signature and expected values). The candidates that dropped the scope fact
+   (e.g. llama omitting the `registry.mjs` registration, `journal §Reading`) did so from
+   assembly accuracy, not because the fact was absent from the pool.
+3. **Even with complete grounding, ornith single-shot passes little on the hard tasks — the
+   corrective loop is what delivers pass@N.** Round-1 clean was **7/10** (T4 4/5; T6 3/5); the
+   loop recovered all 3 round-1 failures at round 2 → 10/10. Mean corrective rounds: T4 1.2, T6
+   1.4. The three round-1 failures were canonical ornith modes, each fixed by *grounding, not
+   scaffold*: **T4-k1** implemented `pow` in `ops.mjs` but left `registry.mjs` unregistered
+   (corrective: named the missing `OPS` registration); **T6-k1** dropped the opening `{` from
+   both `checkout.mjs` declarations → SyntaxError (corrective: named the dropped-brace state +
+   the brace invariant; ornith recovered via write-from-scratch); **T6-k2** the in-place edits
+   errored and applied nothing (corrective: named the no-op + restated the end-state invariants).
+4. **The scrapped single-shot attempt (20 %/60 %) is the control that proves point 3.** With no
+   loop, those same round-1 flakes score as failures/escalations — it measured ornith's round-1
+   reliability, not grounding quality, which is why it was non-comparable to the K=5 loop-driven
+   candidate numbers and was discarded.
+5. **Verifier noise is real but the strong orchestrator absorbs it.** On T4-k2 the `qwen3.5:4b`
+   verifier returned `uncertain` via a parse failure on a manifestly-green run; Claude (which
+   *is* the escalation tier) adjudicated the ground-truth evidence directly and declared `done` —
+   exactly the resolution a candidate could not make (qwen3:14b escalated the analogous case in
+   the main M2 sweep). This is a large part of why the ceiling clears the candidates.
+
+Ceiling rows: `benchmarks/results/{T4-additive-hard,T6-inplace-hard}__orch-claude-recon.jsonl`
+(`orchestratorModel:"claude"`, `reconMode:"candidate"`). Reproduce the tables with
+`node benchmarks/bench.mjs orchestrate-report`.
+
+## Status: M2 candidate sweep + Claude-M2 ceiling COMPLETE — next
+
+- M2 candidate sweep (llama3.1:8b, qwen3:14b, gemma4:12b) **done**; **Claude-M2 ceiling done**
+  (2026-07-14 addendum) — 100 % autoPass, effFS 0 %, recon-delegation cost 0 %. Distilled into
+  `docs/ORCHESTRATOR.md §11.2`. Rows in the gitignored `benchmarks/results/*-recon.jsonl` (the
+  tables here + §11.2 are the durable record).
+- **Next:** (1) tighten `parseGrounding`/rubric for the array-format quirk; (2) **M3** — let the
   candidate drive *agentic* recon (Read/Grep/Bash) instead of pre-computed extractors
   (`ORCHESTRATOR.md §6.2`, where function-calling finally becomes load-bearing).

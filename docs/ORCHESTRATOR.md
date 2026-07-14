@@ -337,15 +337,18 @@ isolates the recon-delegation cost**. Same run matrix as §11.1; candidates `lla
 
 ```
 model (M2 candidate-recon)  n  autoPass  effFS  escalate    vs own M1 autoPass
-llama3.1:8b                10   80%       0%     20%         100% → 80%
-qwen3:14b                  10   80%       0%     20%         100% → 80%
-gemma4:12b                 10   60%       0%     40%          80% → 60%
+claude (ceiling)           10  100%       0%     0%         100% → 100%  (recon-delegation cost 0)
+llama3.1:8b                10   80%       0%     20%         100% →  80%
+qwen3:14b                  10   80%       0%     20%         100% →  80%
+gemma4:12b                 10   60%       0%     40%          80% →  60%
 
 Recon-delegation delta (candidate-M2 pass@N − same model's fixed-M1), per task
 task              model        M2     M1    delta
+T4-additive-hard  claude      100%   100%     0%   (the ceiling — assembly cost 0)
 T4-additive-hard  llama3.1:8b  60%   100%   -40%
 T4-additive-hard  qwen3:14b    80%   100%   -20%
 T4-additive-hard  gemma4:12b   60%    60%     0%
+T6-inplace-hard   claude      100%   100%     0%
 T6-inplace-hard   llama3.1:8b 100%   100%     0%
 T6-inplace-hard   qwen3:14b    80%   100%   -20%
 T6-inplace-hard   gemma4:12b   60%   100%   -40%
@@ -362,6 +365,24 @@ executor failed honestly and llama escalated. (3) Not every M2 miss is a recon d
 compensates**: `llama3.1:8b` held 100 % on T6 via rounds 2–3 despite self-recon. (5) The M1 ordering
 is **preserved but compressed** (llama ≈ qwen3:14b > gemma4:12b). Grounding stayed *facts, not
 steps* — the nest was not stolen. **Caveat:** candidates follow the `{grounding}` JSON contract
-loosely (llama returned an array + prose); `parseGrounding`'s fallback is load-bearing. The
-semi-manual **Claude-M2 ceiling** is not yet run, so the vs-`claude` delta in candidate mode is
-pending; **M3** (agentic Read/Grep/Bash recon, §6.2) is the next step.
+loosely (llama returned an array + prose); `parseGrounding`'s fallback is load-bearing.
+
+**The Claude-M2 ceiling (2026-07-14, semi-manual, loop-driven).** Claude in the recon *and*
+decision seats, driving the full corrective loop (the scrapped single-shot 1-round attempt was
+non-comparable and discarded). Result: **100 % autoPass on both tasks, effFS 0 %, escalate 0 %
+— identical to the Claude fixed-recon M1 baseline, so the recon-delegation cost for a capable
+assembler is 0 %.** Three consequences: (1) **the candidates' ~20 pp M2 drop is model accuracy,
+not a fact-pool/harness gap** — both fact-pools were read directly and contain all the gold
+grounding (T4: the full `registry.mjs` `OPS` map + `evaluate` and `ops.mjs`, so registering
+`pow` is derivable; T6: `pricing.mjs` with `roundCents` byte-exact, both `checkout.mjs` call
+sites, the 2-arg `withTax` test), so a dropped scope fact is an assembly miss, not a missing
+fact. (2) **Even with complete grounding, ornith single-shot passes little on the hard tasks —
+the corrective loop delivers pass@N**: round-1 clean was 7/10, and the loop recovered all three
+round-1 failures at round 2 → 10/10 (mean rounds T4 1.2, T6 1.4), each fixed by *grounding, not
+scaffold* (a named missing `OPS` registration; a dropped-brace SyntaxError; a no-op edit).
+(3) **A strong orchestrator absorbs verifier noise**: on T4-k2 a `qwen3.5:4b` parse-failure
+`uncertain` on a green run was resolved by Claude reading the ground-truth evidence directly
+(the escalation tier doing its job) — a resolution the candidates could not make. Detail:
+[`journal/2026-07-13-orchestrator-selection-3.md`](../journal/2026-07-13-orchestrator-selection-3.md)
+§Addendum. **Next:** tighten `parseGrounding`/rubric for the array-format quirk; **M3** (agentic
+Read/Grep/Bash recon, §6.2) is the next step.
